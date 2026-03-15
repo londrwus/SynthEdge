@@ -34,3 +34,5 @@ pgdata/
 
 # Pencil
 *.pen.bak
+
+.claude
