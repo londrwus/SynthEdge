@@ -50,8 +50,6 @@ services:
       start_period: 30s
     networks:
       - internal
-    networks:
-      - internal
     expose:
       - "8000"
 
