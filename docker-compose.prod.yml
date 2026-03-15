@@ -64,11 +64,11 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "sh", "-c", "wget --no-verbose --tries=1 --spider http://0.0.0.0:3000 || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 8
+      start_period: 45s
     networks:
       - internal
     expose:
