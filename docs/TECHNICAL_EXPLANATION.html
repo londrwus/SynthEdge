@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SynthEdge — Technical Explanation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    color: #1a1a1a;
+    max-width: 8.5in;
+    margin: 0 auto;
+    padding: 0.5in 0.6in;
+  }
+
+  h1 {
+    font-size: 18pt;
+    font-weight: 700;
+    margin-bottom: 2pt;
+    color: #0a0a0a;
+  }
+
+  h1 span { color: #7c8a2e; }
+
+  .subtitle {
+    font-size: 9pt;
+    color: #666;
+    margin-bottom: 12pt;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .subtitle a { color: #7c8a2e; text-decoration: none; }
+
+  h2 {
+    font-size: 11pt;
+    font-weight: 700;
+    margin-top: 10pt;
+    margin-bottom: 4pt;
+    color: #0a0a0a;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 2pt;
+  }
+
+  p { margin-bottom: 5pt; }
+
+  strong { font-weight: 600; }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9pt;
+    background: #f5f5f0;
+    padding: 1px 3px;
+    border-radius: 2px;
+  }
+
+  ul {
+    margin-left: 14pt;
+    margin-bottom: 5pt;
+  }
+
+  li { margin-bottom: 2pt; }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12pt;
+    margin: 6pt 0;
+  }
+
+  .col { }
+
+  .arch {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8.5pt;
+    background: #0a0a0f;
+    color: #e0e0d0;
+    padding: 8pt 10pt;
+    margin: 6pt 0;
+    border-radius: 3px;
+    line-height: 1.5;
+  }
+
+  .arch .green { color: #b8c96e; }
+  .arch .dim { color: #666; }
+
+  .criteria-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+    margin: 6pt 0;
+  }
+
+  .criteria-table th {
+    text-align: left;
+    background: #f5f5f0;
+    padding: 3pt 6pt;
+    font-weight: 600;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .criteria-table td {
+    padding: 3pt 6pt;
+    border-bottom: 1px solid #eee;
+  }
+
+  .criteria-table td:nth-child(2) {
+    font-weight: 600;
+    color: #7c8a2e;
+    width: 40pt;
+  }
+
+  @media print {
+    body { padding: 0.4in 0.5in; }
+    @page { size: letter; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<h1><span>Synth</span>Edge — Technical Explanation</h1>
+<div class="subtitle">
+  Synth Hackathon 2026 · Best Equities Application · Live: <a href="https://synthedge.xyz">synthedge.xyz</a> · GitHub: <a href="https://github.com/londrwus/SynthEdge">londrwus/SynthEdge</a>
+</div>
+
+<h2>What It Does</h2>
+<p>SynthEdge is a <strong>probabilistic trading terminal</strong> connecting <strong>Synth's AI-powered price forecasts</strong> with <strong>Hyperliquid's on-chain equity perpetual execution</strong>. Users bring their own Synth API key and Hyperliquid wallet, then see probability distributions, volatility analytics, regime detection, and risk management — with direct trade execution on Hyperliquid's perps and HIP-3 equity markets across 9 assets: BTC, ETH, SOL, XAU, SPY, NVDA, TSLA, AAPL, GOOGL.</p>
+
+<h2>How It Uses the Synth API</h2>
+<p><strong>Primary endpoint:</strong> <code>/insights/prediction-percentiles</code> — polled every 5 minutes, cached in Redis (10-min TTL). Each response: 289 timesteps × 9 percentile levels (0.5th–99.5th). From this single endpoint we <strong>locally derive everything</strong>: implied volatility (P5–P95 spread annualized), directional probability, distribution skew/kurtosis, regime classification, tail risk metrics, and probability cone visualizations. <strong>Dedicated endpoints</strong> (<code>/insights/option-pricing</code>, <code>/insights/liquidation</code>) called on-demand only. Total: ~144 API credits/hour — 85% less than naive polling.</p>
+
+<div class="two-col">
+<div class="col">
+<h2>Probabilistic Modeling (30%)</h2>
+<p>Every feature uses probability distributions, not point predictions:</p>
+<ul>
+  <li><strong>VaR/CVaR</strong> from distribution tails (forward-looking)</li>
+  <li><strong>Kelly Criterion</strong> sizing from Synth-derived win/loss probabilities</li>
+  <li><strong>Regime detection</strong> from distribution shape → 4 regimes with playbooks</li>
+  <li><strong>Probability cones</strong> — 9 percentiles × 289 timesteps, interactive D3.js</li>
+  <li><strong>Earnings vol</strong> — Synth forecast vs historical equity earnings moves</li>
+  <li><strong>Smart orders</strong> — SL/TP from P80/P20 percentiles</li>
+  <li><strong>Cross-asset vol</strong> — crypto vs equity ratio (~6x) from same model</li>
+  <li><strong>Signals engine</strong> — direction, confluence, tail risk, vol spike alerts</li>
+</ul>
+</div>
+<div class="col">
+<h2>Technical Implementation (30%)</h2>
+<ul>
+  <li><strong>Backend:</strong> Python 3.12 + FastAPI (async), 25 REST endpoints, Redis 7 caching with pipeline writes, GZip, connection pooling. 53 pytest tests.</li>
+  <li><strong>Frontend:</strong> Next.js 15 + TypeScript, 12 routes, TradingView Lightweight Charts v5, D3.js probability cone, Zustand, TanStack Query v5.</li>
+  <li><strong>Execution:</strong> Hyperliquid Python SDK — crypto perps (BTC/ETH/SOL) + HIP-3 spot (TSLA/AAPL/GOOGL/SPY). MetaMask wallet connect.</li>
+  <li><strong>Infrastructure:</strong> Docker Compose (5 containers), Nginx, Let's Encrypt SSL, Ubuntu 24.04.</li>
+</ul>
+</div>
+</div>
+
+<h2>Practical Market Relevance (25%)</h2>
+<p>Addresses <strong>all 5 hackathon equity examples</strong>: (1) Earnings volatility dashboard comparing forecasts vs historical moves, (2) Cross-asset correlation tracking equities vs crypto vol, (3) Equity options strike selector from Synth's price ranges, (4) Portfolio risk monitor using Synth's vol forecasts, (5) Regime detection flagging vol shifts. Plus: directional scanner, Kelly sizer, signals & alerts, and direct Hyperliquid execution with Synth-derived SL/TP levels.</p>
+
+<h2>Innovation (15%)</h2>
+<p><strong>First product bridging Synth's AI forecasts with Hyperliquid's on-chain execution.</strong> Key innovations: Synth-powered smart orders (SL/TP from percentiles, not arbitrary %), cross-asset vol ratio from the same AI model, regime-based trading playbooks from distribution shape, signals engine generating alerts from probabilistic data, and BYOK model driving adoption of both ecosystems.</p>
+
+<div class="arch">
+<span class="dim">// Architecture</span><br>
+User Browser → <span class="green">Nginx (SSL :443)</span> → Docker Network<br>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="green">Frontend</span> (Next.js :3000) — 12 routes, TradingView, D3.js<br>
+&nbsp;&nbsp;&nbsp;&nbsp;└── <span class="green">Backend</span> (FastAPI :8000) — 25 endpoints, Redis, PostgreSQL<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Synth API (prediction-percentiles, options, liquidation)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── Hyperliquid API (perps + HIP-3 spot trading, portfolio)
+</div>
+
+<table class="criteria-table">
+  <tr><th>Selection Criteria</th><th>Weight</th><th>How SynthEdge Scores</th></tr>
+  <tr><td>Technical Implementation</td><td>30%</td><td>Full-stack (FastAPI + Next.js + Redis + Docker + HL SDK), 25 endpoints, 53 tests, deployed with SSL</td></tr>
+  <tr><td>Probabilistic Modeling</td><td>30%</td><td>VaR, Kelly, regime, cones, distribution analysis, earnings vol, signals — all from Synth distributions</td></tr>
+  <tr><td>Practical Market Relevance</td><td>25%</td><td>All 5 equity examples implemented, real execution on Hyperliquid, portfolio enrichment</td></tr>
+  <tr><td>Innovation</td><td>15%</td><td>First Synth × Hyperliquid terminal, smart orders from percentiles, cross-asset vol ratio</td></tr>
+</table>
+
+</body>
+</html>
