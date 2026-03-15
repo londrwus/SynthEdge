@@ -77,4 +77,47 @@ export const api = {
     fetchAPI<any>(`/api/insights/distribution?asset=${asset}&horizon=${horizon}`),
   getVolTermStructure: (asset: string) =>
     fetchAPI<any>(`/api/insights/vol-term-structure?asset=${asset}`),
+
+  // Trading (Hyperliquid execution)
+  placeMarketOrder: (body: {
+    asset: string;
+    is_buy: boolean;
+    size: number;
+    leverage?: number;
+    private_key?: string;
+    account_address?: string;
+  }) =>
+    fetchAPI<any>("/api/trading/market-order", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  placeSmartOrder: (body: {
+    asset: string;
+    is_buy: boolean;
+    size: number;
+    private_key?: string;
+    account_address?: string;
+    horizon?: string;
+  }) =>
+    fetchAPI<any>("/api/trading/smart-order", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  closePosition: (body: { asset: string; private_key?: string; account_address?: string }) =>
+    fetchAPI<any>("/api/trading/close", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getOpenOrders: (address: string) =>
+    fetchAPI<any>(`/api/trading/open-orders?address=${address}`),
+  getUserFills: (address: string) =>
+    fetchAPI<any>(`/api/trading/user-fills?address=${address}`),
+
+  // Earnings
+  getEarningsDashboard: (horizon = "24h") =>
+    fetchAPI<any>(`/api/earnings/dashboard?horizon=${horizon}`),
+
+  // System
+  forceRefresh: () =>
+    fetchAPI<any>("/api/refresh", { method: "POST" }),
 };

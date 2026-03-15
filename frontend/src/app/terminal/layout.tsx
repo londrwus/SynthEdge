@@ -6,11 +6,16 @@ import { usePathname } from "next/navigation";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { cn } from "@/lib/utils";
 import { TickerTape } from "@/components/ticker-tape";
+import { WalletConnect } from "@/components/wallet-connect";
 
 const NAV_ITEMS = [
   { href: "/terminal", icon: "\u25C8", label: "DASHBOARD" },
-  { href: "/terminal/asset/BTC", icon: "\u25C9", label: "ASSETS" },
-  { href: "/terminal/portfolio", icon: "\uD83D\uDCBC", label: "PORTFOLIO" },
+  { href: "/terminal/signals", icon: "\u25CF", label: "SIGNALS" },
+  { href: "/terminal/screener", icon: "\u25A6", label: "SCREENER" },
+  { href: "/terminal/asset/BTC", icon: "\u25C9", label: "ASSET DETAIL" },
+  { href: "/terminal/earnings", icon: "\u25B2", label: "EARNINGS VOL" },
+  { href: "/terminal/risk", icon: "\u26A0", label: "RISK MONITOR" },
+  { href: "/terminal/portfolio", icon: "\u25A3", label: "PORTFOLIO" },
   { href: "/terminal/faq", icon: "?", label: "HELP / FAQ" },
   { href: "/settings", icon: "\u2699", label: "SETTINGS" },
 ];
@@ -45,9 +50,7 @@ export default function TerminalLayout({
               SYNTH {synthApiKey ? "[CONNECTED]" : "[NO_KEY]"}
             </span>
             <span className="text-border-dim">|</span>
-            <span className={hlAddress ? "text-neon-green" : "text-text-muted"}>
-              HL {hlAddress ? "[CONNECTED]" : "[OFFLINE]"}
-            </span>
+            <WalletConnect />
           </div>
 
           <span className="text-border-dim hidden md:inline">|</span>

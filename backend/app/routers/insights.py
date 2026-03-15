@@ -21,15 +21,16 @@ def _resolve_key(header_key: Optional[str] = None) -> str:
 
 
 async def _synth_get(path: str, params: dict, api_key: str) -> dict:
-    """Make authenticated GET to Synth API."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            f"{settings.SYNTH_API_BASE}{path}",
-            params=params,
-            headers={"Authorization": f"Apikey {api_key}"},
-        )
-        resp.raise_for_status()
-        return resp.json()
+    """Make authenticated GET to Synth API. Reuses connection pool."""
+    from app.services.synth_service import _get_http_client
+    client = await _get_http_client()
+    resp = await client.get(
+        f"{settings.SYNTH_API_BASE}{path}",
+        params=params,
+        headers={"Authorization": f"Apikey {api_key}"},
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 # ─── OPTIONS PRICING (on-demand) ────────────────────────────────────────

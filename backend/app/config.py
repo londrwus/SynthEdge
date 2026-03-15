@@ -9,8 +9,9 @@ class Settings(BaseSettings):
     # Synth API
     SYNTH_API_KEY: str = ""
     SYNTH_API_BASE: str = "https://api.synthdata.co"
-    SYNTH_POLL_INTERVAL_SECONDS: int = 60
-    SYNTH_CACHE_TTL_SECONDS: int = 120
+    SYNTH_POLL_INTERVAL_SECONDS: int = 300  # 5 minutes default (configurable)
+    SYNTH_CACHE_TTL_SECONDS: int = 600  # 10 minutes (survives between polls)
+    SYNTH_1H_ENABLED: bool = True  # Set False to skip 1h polling entirely
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

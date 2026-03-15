@@ -1,11 +1,17 @@
 """Synth API client and polling service.
 
-Credit optimization strategy:
-- Poll only 24h horizon every 60s (primary data, updates every 5min on Synth side)
-- Poll 1h horizon every 120s (updates every 1min on Synth side, but we don't need every update)
-- Use longer Redis TTL (120s) so data survives between polls
-- Reuse httpx client across requests (connection pooling)
-- Save to mock files only once (not every poll cycle)
+CREDIT OPTIMIZATION:
+- Default poll interval: 5 minutes (configurable via settings)
+- Only poll 24h by default (1h on-demand or every 3rd cycle)
+- Redis TTL: 10 minutes (survives between polls)
+- Connection pooling via shared httpx client
+- Mock data saved once per session
+- Force-refresh endpoint for manual updates
+
+Cost estimate at 5-min polling:
+  9 assets × 1 call × 12/hr = 108 credits/hr
+  + 9 assets × 1h every 3rd cycle = 36 credits/hr
+  Total: ~144 credits/hr = 3,456 credits/day
 """
 
 import asyncio
@@ -18,19 +24,17 @@ import httpx
 import redis.asyncio as aioredis
 
 from app.config import settings
-from app.core.derivations import ASSETS, HORIZONS, compute_derived_metrics
+from app.core.derivations import ASSETS, compute_derived_metrics
 
 logger = logging.getLogger("synthedge.synth")
 
 MOCK_DIR = Path(__file__).parent.parent.parent / "mock_data"
 
 redis_client: aioredis.Redis | None = None
-
-# Reusable HTTP client (connection pooling)
 _http_client: httpx.AsyncClient | None = None
-
-# Track if we've saved mock data this session (save once only)
 _mock_saved: set[str] = set()
+_last_poll_time: float = 0
+_poll_count: int = 0
 
 
 async def get_redis() -> aioredis.Redis:
@@ -59,7 +63,7 @@ async def fetch_percentiles(asset: str, horizon: str, api_key: str) -> dict:
         resp.raise_for_status()
         data = resp.json()
 
-        # Save mock data once per session for fallback
+        # Save mock data once per session
         mock_key = f"{asset}_{horizon}"
         if settings.SAVE_MOCK_DATA and mock_key not in _mock_saved:
             mock_file = MOCK_DIR / f"{mock_key}.json"
@@ -81,12 +85,14 @@ async def cache_synth_data(asset: str, horizon: str, data: dict):
     r = await get_redis()
     ttl = settings.SYNTH_CACHE_TTL_SECONDS
 
-    # Use pipeline for atomic writes
     pipe = r.pipeline()
     pipe.setex(f"synth:{asset}:{horizon}", ttl, json.dumps(data))
 
     derived = compute_derived_metrics(data, asset, horizon)
     pipe.setex(f"derived:{asset}:{horizon}", ttl, json.dumps(derived))
+
+    # Store last update timestamp
+    pipe.set("synth:last_update", str(time.time()))
     await pipe.execute()
 
 
@@ -102,56 +108,106 @@ async def get_cached_derived(asset: str, horizon: str) -> dict | None:
     return json.loads(raw) if raw else None
 
 
-async def synth_polling_loop():
-    """Background task: poll Synth API for all assets/horizons.
+async def get_poll_status() -> dict:
+    """Get current polling status for frontend display."""
+    r = await get_redis()
+    last_update = await r.get("synth:last_update")
+    return {
+        "last_update": float(last_update) if last_update else None,
+        "poll_count": _poll_count,
+        "poll_interval_seconds": settings.SYNTH_POLL_INTERVAL_SECONDS,
+        "cache_ttl_seconds": settings.SYNTH_CACHE_TTL_SECONDS,
+        "credits_per_hour_estimate": (
+            len(ASSETS) * (3600 / settings.SYNTH_POLL_INTERVAL_SECONDS)  # 24h polls
+            + len(ASSETS) * (3600 / settings.SYNTH_POLL_INTERVAL_SECONDS) / 3  # 1h polls (every 3rd)
+        ),
+    }
 
-    Credit optimization:
-    - 24h: poll every 60s (9 assets = 9 credits/min = 540 credits/hr)
-    - 1h: poll every 120s (9 assets = 4.5 credits/min = 270 credits/hr)
-    - Total: ~810 credits/hr (down from 1080)
-    - With staggering, spreads load evenly
+
+async def force_refresh_all(api_key: str | None = None) -> dict:
+    """Force-refresh all assets. Called by manual refresh button."""
+    key = api_key or settings.SYNTH_API_KEY
+    if not key:
+        return {"error": "no_api_key", "refreshed": 0}
+
+    # Equities don't support 1h on Synth API
+    EQUITY_ONLY_24H = {"SPY", "NVDA", "TSLA", "AAPL", "GOOGL"}
+
+    refreshed = 0
+    for asset in ASSETS:
+        horizons = ["24h"] if asset in EQUITY_ONLY_24H else ["24h", "1h"]
+        for horizon in horizons:
+            try:
+                data = await fetch_percentiles(asset, horizon, key)
+                await cache_synth_data(asset, horizon, data)
+                refreshed += 1
+            except Exception as e:
+                logger.error(f"Force refresh failed {asset}/{horizon}: {e}")
+            await asyncio.sleep(0.2)
+
+    return {"refreshed": refreshed, "total": len(ASSETS) * 2}
+
+
+async def synth_polling_loop():
+    """Background task: poll Synth API on configurable interval.
+
+    Default: 5-minute intervals
+    - Every cycle: poll 24h for all 9 assets (9 API calls)
+    - Every 3rd cycle: also poll 1h for all 9 assets (+9 API calls)
+    - Total: ~144 credits/hour at 5-min intervals
     """
+    global _poll_count, _last_poll_time
+
     api_key = settings.SYNTH_API_KEY
     if not api_key:
-        logger.warning("No SYNTH_API_KEY set, polling from mock data only")
-
-    poll_count = 0
-
-    while True:
-        poll_count += 1
-
+        logger.warning("No SYNTH_API_KEY set, loading from mock data")
+        # Load mock data once
         for asset in ASSETS:
-            # Always poll 24h
-            try:
-                if api_key:
-                    data = await fetch_percentiles(asset, "24h", api_key)
-                else:
-                    mock_file = MOCK_DIR / f"{asset}_24h.json"
+            for horizon in ["24h", "1h"]:
+                mock_file = MOCK_DIR / f"{asset}_{horizon}.json"
+                if mock_file.exists():
+                    data = json.loads(mock_file.read_text())
+                    await cache_synth_data(asset, horizon, data)
+        logger.info("Mock data loaded into cache")
+        # Keep running to maintain cache TTL
+        while True:
+            for asset in ASSETS:
+                for horizon in ["24h", "1h"]:
+                    mock_file = MOCK_DIR / f"{asset}_{horizon}.json"
                     if mock_file.exists():
                         data = json.loads(mock_file.read_text())
-                    else:
-                        continue
+                        await cache_synth_data(asset, horizon, data)
+            await asyncio.sleep(settings.SYNTH_CACHE_TTL_SECONDS - 10)
+
+    # Real API polling
+    while True:
+        _poll_count += 1
+        _last_poll_time = time.time()
+
+        # Always poll 24h
+        for asset in ASSETS:
+            try:
+                data = await fetch_percentiles(asset, "24h", api_key)
                 await cache_synth_data(asset, "24h", data)
             except Exception as e:
                 logger.error(f"Poll failed {asset}/24h: {e}")
+            await asyncio.sleep(0.3)
 
-            # Poll 1h every other cycle to save credits
-            if poll_count % 2 == 0:
+        # Poll 1h every 3rd cycle (only crypto + XAU — equities don't support 1h)
+        SUPPORTS_1H = {"BTC", "ETH", "SOL", "XAU"}
+        if _poll_count % 3 == 0:
+            for asset in ASSETS:
+                if asset not in SUPPORTS_1H:
+                    continue
                 try:
-                    if api_key:
-                        data = await fetch_percentiles(asset, "1h", api_key)
-                    else:
-                        mock_file = MOCK_DIR / f"{asset}_1h.json"
-                        if mock_file.exists():
-                            data = json.loads(mock_file.read_text())
-                        else:
-                            continue
+                    data = await fetch_percentiles(asset, "1h", api_key)
                     await cache_synth_data(asset, "1h", data)
                 except Exception as e:
                     logger.error(f"Poll failed {asset}/1h: {e}")
+                await asyncio.sleep(0.3)
 
-            # Small delay between assets to avoid rate limiting
-            await asyncio.sleep(0.3)
-
-        logger.info(f"Poll cycle {poll_count} complete ({len(ASSETS)} assets)")
+        logger.info(
+            f"Poll #{_poll_count} complete "
+            f"(24h: {len(ASSETS)}, 1h: {len(ASSETS) if _poll_count % 3 == 0 else 0})"
+        )
         await asyncio.sleep(settings.SYNTH_POLL_INTERVAL_SECONDS)

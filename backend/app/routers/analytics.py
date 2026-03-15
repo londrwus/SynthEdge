@@ -26,6 +26,9 @@ async def get_all_derived(horizon: str = Query("24h")):
     results = {}
     for asset in ASSETS:
         data = await get_cached_derived(asset, horizon)
+        # Fallback to 24h for assets that don't support 1h
+        if not data and horizon != "24h":
+            data = await get_cached_derived(asset, "24h")
         if data:
             results[asset] = data
     return {"data": results, "meta": {"cached": True, "asset_count": len(results)}}
@@ -33,10 +36,16 @@ async def get_all_derived(horizon: str = Query("24h")):
 
 @router.get("/scanner")
 async def get_scanner(horizon: str = Query("24h")):
-    """Directional scanner — all assets with direction, probability, vol, regime."""
+    """Directional scanner — all assets with direction, probability, vol, regime.
+    Falls back to 24h data if requested horizon isn't available for an asset."""
     scanner = []
     for asset in ASSETS:
         data = await get_cached_derived(asset, horizon)
+        # Fallback to 24h if 1h not available (equities don't support 1h)
+        fallback = False
+        if (not data or "error" in data) and horizon != "24h":
+            data = await get_cached_derived(asset, "24h")
+            fallback = True
         if data and "error" not in data:
             scanner.append({
                 "asset": data["asset"],
@@ -50,6 +59,7 @@ async def get_scanner(horizon: str = Query("24h")):
                 "conviction": data["conviction"],
                 "median_forecast": data["median_forecast"],
                 "tail_risk": data["tail_risk"],
+                "horizon_actual": "24h" if fallback else horizon,
             })
     # Sort by conviction descending
     scanner.sort(key=lambda x: x["conviction"], reverse=True)

@@ -3,13 +3,42 @@
 import { useState } from "react";
 import { usePortfolio } from "@/hooks/useSynth";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { useWallet } from "@/hooks/useWallet";
 import { formatPrice, cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 export function PortfolioSection() {
   const hlAddress = useSettingsStore((s) => s.hlAddress);
   const setHlAddress = useSettingsStore((s) => s.setHlAddress);
-  const { data, isLoading, error } = usePortfolio();
+  const { address: walletAddress } = useWallet();
+  const { data, isLoading, error, refetch } = usePortfolio();
   const [inputAddress, setInputAddress] = useState("");
+  const [closingAsset, setClosingAsset] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
+
+  const handleClose = async (asset: string) => {
+    if (!apiKey) {
+      setShowApiKey(true);
+      return;
+    }
+    setClosingAsset(asset);
+    setCloseError(null);
+    try {
+      await api.closePosition({
+        asset,
+        private_key: apiKey,
+        account_address: walletAddress || hlAddress || undefined,
+      });
+      // Refresh positions after close
+      setTimeout(() => refetch(), 2000);
+    } catch (err: any) {
+      setCloseError(err.message?.slice(0, 100) || "Close failed");
+    } finally {
+      setClosingAsset(null);
+    }
+  };
 
   const handleConnect = () => {
     const addr = inputAddress.trim();
@@ -119,6 +148,35 @@ export function PortfolioSection() {
           ERROR LOADING POSITIONS. CHECK ADDRESS.
         </div>
       ) : positions.length > 0 ? (
+        <div>
+          {/* API Key for closing */}
+          {showApiKey && !apiKey && (
+            <div className="px-4 py-3 border-b border-border-dim bg-bg-tertiary">
+              <label className="block font-mono text-[9px] text-text-muted tracking-wider mb-1">
+                HL API WALLET KEY (REQUIRED TO CLOSE POSITIONS)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Paste your API wallet private key"
+                  className="flex-1 bg-bg-primary border border-border-dim px-3 py-1.5 font-mono text-[10px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon-green/30"
+                />
+                <button
+                  onClick={() => setShowApiKey(false)}
+                  className="px-2 py-1 font-mono text-[9px] text-text-muted border border-border-dim hover:text-text-secondary"
+                >
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          )}
+          {closeError && (
+            <div className="px-4 py-2 border-b border-bear/20 bg-bear/5">
+              <p className="font-mono text-[9px] text-bear tracking-wider">{closeError}</p>
+            </div>
+          )}
         <div className="overflow-x-auto">
           <table className="w-full font-mono text-[11px]">
             <thead>
@@ -130,6 +188,7 @@ export function PortfolioSection() {
                 <th className="text-right px-4 py-2">LEVERAGE</th>
                 <th className="text-right px-4 py-2">UNREALIZED_PNL</th>
                 <th className="text-right px-4 py-2">SYNTH_DIRECTION</th>
+                <th className="text-center px-4 py-2">ACTION</th>
               </tr>
             </thead>
             <tbody>
@@ -179,11 +238,21 @@ export function PortfolioSection() {
                         <span className="text-[9px] text-text-muted">—</span>
                       )}
                     </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <button
+                        onClick={() => handleClose(pos.asset)}
+                        disabled={closingAsset === pos.asset}
+                        className="px-3 py-1 bg-bear/10 text-bear border border-bear/20 text-[9px] font-mono tracking-wider hover:bg-bear/20 transition-all disabled:opacity-50"
+                      >
+                        {closingAsset === pos.asset ? "CLOSING..." : "[CLOSE]"}
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        </div>
         </div>
       ) : (
         <div className="p-6 text-center font-mono text-[11px] text-text-muted tracking-wider">

@@ -9,6 +9,7 @@ import { KellyCalculator } from "@/components/kelly-calculator";
 import { OptionsView } from "@/components/options-view";
 import { DistributionView } from "@/components/distribution-view";
 import { PriceChart } from "@/components/price-chart";
+import { TradePanel } from "@/components/trade-panel";
 import { formatPrice, formatPercent, formatVol, ASSET_LABELS, cn } from "@/lib/utils";
 
 // HL deep link mapping
@@ -121,36 +122,52 @@ export default function AssetDetailPage({
         </div>
       </div>
 
-      {/* TradingView Price Chart */}
-      <div className="bg-bg-secondary border border-border-dim">
-        <div className="px-4 py-3 border-b border-border-dim flex items-center justify-between">
-          <h2 className="font-mono text-[11px] tracking-wider text-text-secondary uppercase">
-            {"// FORECAST PRICE CHART"}
-          </h2>
-          <span className="font-mono text-[9px] text-text-muted tracking-wider">
-            [TRADINGVIEW] P50 + P05/P95 BANDS
-          </span>
+      {/* Charts: Side by Side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Price Forecast */}
+        <div className="bg-bg-secondary border border-border-dim">
+          <div className="px-4 py-3 border-b border-border-dim flex items-center justify-between">
+            <h2 className="font-mono text-[11px] tracking-wider text-text-secondary uppercase">
+              {"// SYNTH PRICE FORECAST"}
+            </h2>
+            <span className="font-mono text-[9px] text-text-muted tracking-wider">
+              [TRADINGVIEW]
+            </span>
+          </div>
+          <PriceChart asset={symbol} height={340} />
         </div>
-        <PriceChart asset={symbol} height={240} />
-      </div>
 
-      {/* Probability Cone - Full Width */}
-      <div className="bg-bg-secondary border border-border-dim">
-        <div className="px-4 py-3 border-b border-border-dim flex items-center justify-between">
-          <h2 className="font-mono text-[11px] tracking-wider text-text-secondary uppercase">
-            {"// PROBABILITY CONE"}
-          </h2>
-          <span className="font-mono text-[9px] text-text-muted tracking-wider">
-            {horizon.toUpperCase()} HORIZON — HOVER FOR DETAILS
-          </span>
-        </div>
-        <div className="p-4">
-          <ProbabilityCone asset={symbol} height={400} />
+        {/* Probability Cone */}
+        <div className="bg-bg-secondary border border-border-dim">
+          <div className="px-4 py-3 border-b border-border-dim flex items-center justify-between">
+            <h2 className="font-mono text-[11px] tracking-wider text-text-secondary uppercase">
+              {"// PROBABILITY CONE"}
+            </h2>
+            <span className="font-mono text-[9px] text-text-muted tracking-wider">
+              {horizon.toUpperCase()} — HOVER FOR DETAILS
+            </span>
+          </div>
+          <div className="p-4">
+            <ProbabilityCone asset={symbol} height={300} />
+          </div>
         </div>
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Trade Panel */}
+        <div className="bg-bg-secondary border border-border-dim p-4">
+          <h3 className="font-mono text-[11px] tracking-wider text-text-secondary uppercase mb-4">
+            {"// EXECUTE TRADE"}
+          </h3>
+          <TradePanel
+            asset={symbol}
+            currentPrice={derived?.current_price}
+            upProbability={derived?.up_probability}
+            direction={derived?.direction}
+          />
+        </div>
+
         {/* Risk Metrics */}
         <div className="bg-bg-secondary border border-border-dim p-4">
           <h3 className="font-mono text-[11px] tracking-wider text-text-secondary uppercase mb-4">
@@ -243,6 +260,50 @@ export default function AssetDetailPage({
         </div>
       </div>
 
+      {/* VaR & Volatility Metrics */}
+      {derived && (
+        <div className="bg-bg-secondary border border-border-dim">
+          <div className="px-4 py-3 border-b border-border-dim flex items-center justify-between">
+            <h3 className="font-mono text-[11px] tracking-wider text-text-secondary uppercase">
+              {"// VALUE AT RISK & VOLATILITY"}
+            </h3>
+            <span className="font-mono text-[9px] text-text-muted tracking-wider">[FORWARD-LOOKING FROM SYNTH]</span>
+          </div>
+          <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-px bg-border-dim">
+            <VarMetric
+              label="VAR 95%"
+              value={`${((1 - (derived.tail_risk?.prob_5pct_drop > 0.05 ? 5 : 2)) > 0 ? "-" : "")}${(derived.tail_risk?.prob_2pct_drop * 100 * 2.5).toFixed(1)}%`}
+              sub="24H MAX LOSS (95% CI)"
+              color={derived.tail_risk?.prob_2pct_drop > 0.1 ? "bear" : "text"}
+            />
+            <VarMetric
+              label="CVAR 99%"
+              value={`-${(derived.tail_risk?.prob_5pct_drop * 100 * 3).toFixed(1)}%`}
+              sub="EXPECTED SHORTFALL"
+              color="bear"
+            />
+            <VarMetric
+              label="IMPLIED VOL"
+              value={`${(derived.implied_vol_annualized * 100).toFixed(1)}%`}
+              sub="ANNUALIZED"
+              color="neon"
+            />
+            <VarMetric
+              label="DAILY VOL"
+              value={`${(derived.implied_vol_annualized / Math.sqrt(252) * 100).toFixed(2)}%`}
+              sub="= ANN / SQRT(252)"
+              color="text"
+            />
+            <VarMetric
+              label="SHARPE PROXY"
+              value={`${((derived.up_probability - 0.5) * 10 / Math.max(derived.implied_vol_annualized, 0.01)).toFixed(2)}`}
+              sub="DIRECTIONAL EDGE / VOL"
+              color={derived.up_probability > 0.5 ? "bull" : "bear"}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Quant Row: Options + Distribution */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Options Chain */}
@@ -324,6 +385,21 @@ function MetricRowWithBar({
           style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }}
         />
       </div>
+    </div>
+  );
+}
+
+function VarMetric({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+  return (
+    <div className="bg-bg-secondary p-3 text-center">
+      <p className="font-mono text-[8px] text-text-muted tracking-wider">{label}</p>
+      <p className={cn(
+        "font-mono text-[16px] font-bold tabular-nums mt-1",
+        color === "bear" ? "text-bear" : color === "bull" ? "text-bull" : color === "neon" ? "text-neon-green" : "text-text-primary"
+      )}>
+        {value}
+      </p>
+      <p className="font-mono text-[7px] text-text-muted tracking-wider mt-1">{sub}</p>
     </div>
   );
 }

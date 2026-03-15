@@ -6,9 +6,11 @@ export default function SettingsPage() {
   const {
     synthApiKey,
     hlAddress,
+    hlApiWalletKey,
     horizon,
     setSynthApiKey,
     setHlAddress,
+    setHlApiWalletKey,
     setHorizon,
   } = useSettingsStore();
 
@@ -67,6 +69,28 @@ export default function SettingsPage() {
             <p className="font-mono text-[9px] text-text-muted tracking-wider mt-1">
               READ-ONLY PORTFOLIO VIEW. NO PRIVATE KEYS NEEDED.
             </p>
+          </div>
+
+          <div>
+            <label className="block font-mono text-[10px] text-text-muted uppercase tracking-wider mb-2">
+              HL_API_WALLET_KEY
+            </label>
+            <input
+              type="password"
+              value={hlApiWalletKey}
+              onChange={(e) => setHlApiWalletKey(e.target.value)}
+              placeholder="Paste your Hyperliquid API wallet private key"
+              className="w-full bg-bg-tertiary border border-border-dim px-4 py-2.5 font-mono text-[11px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon-green/30 transition-all"
+            />
+            <p className="font-mono text-[9px] text-text-muted tracking-wider mt-1">
+              FOR TRADING. CREATE AT APP.HYPERLIQUID.XYZ → API → GENERATE.
+              STORED LOCALLY IN YOUR BROWSER.
+            </p>
+            {hlApiWalletKey && (
+              <p className="font-mono text-[9px] text-neon-green tracking-wider mt-1">
+                [SAVED] KEY WILL BE USED FOR ALL TRADES.
+              </p>
+            )}
           </div>
         </div>
       </div>

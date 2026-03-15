@@ -210,6 +210,21 @@ def kelly_from_synth(
     q = 1 - win_prob
     kelly = max((win_prob * b - q) / b, 0) * fraction
 
+    # Suggest realistic TP/SL from percentiles
+    suggested_tp_long = percentiles.get("0.8", current_price * 1.01)  # 80th percentile
+    suggested_sl_long = percentiles.get("0.2", current_price * 0.99)  # 20th percentile
+    suggested_tp_short = percentiles.get("0.2", current_price * 0.99)
+    suggested_sl_short = percentiles.get("0.8", current_price * 1.01)
+
+    # Warning if TP/SL are outside the distribution
+    max_price = max(v for v in percentiles.values())
+    min_price = min(v for v in percentiles.values())
+    warning = None
+    if direction == "long" and take_profit > max_price:
+        warning = f"TP ${take_profit:.2f} is above 99.5th percentile ${max_price:.2f}. Consider a lower target."
+    elif direction == "short" and take_profit < min_price:
+        warning = f"TP ${take_profit:.2f} is below 0.5th percentile ${min_price:.2f}. Consider a higher target."
+
     return {
         "kelly_fraction": round(kelly, 4),
         "win_probability": round(win_prob, 4),
@@ -217,6 +232,12 @@ def kelly_from_synth(
         "avg_win_pct": round(win_pct, 4),
         "avg_loss_pct": round(loss_pct, 4),
         "recommended_position_pct": round(kelly * 100, 2),
+        "suggested_levels": {
+            "long": {"tp": round(suggested_tp_long, 2), "sl": round(suggested_sl_long, 2)},
+            "short": {"tp": round(suggested_tp_short, 2), "sl": round(suggested_sl_short, 2)},
+        },
+        "distribution_range": {"min": round(min_price, 2), "max": round(max_price, 2)},
+        "warning": warning,
     }
 
 
