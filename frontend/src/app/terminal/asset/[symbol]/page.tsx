@@ -154,7 +154,7 @@ export default function AssetDetailPage({
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Trade Panel */}
         <div className="bg-bg-secondary border border-border-dim p-4">
           <h3 className="font-mono text-[11px] tracking-wider text-text-secondary uppercase mb-4">
@@ -269,7 +269,7 @@ export default function AssetDetailPage({
             </h3>
             <span className="font-mono text-[9px] text-text-muted tracking-wider">[FORWARD-LOOKING FROM SYNTH]</span>
           </div>
-          <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-px bg-border-dim">
+          <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-border-dim">
             <VarMetric
               label="VAR 95%"
               value={`${((1 - (derived.tail_risk?.prob_5pct_drop > 0.05 ? 5 : 2)) > 0 ? "-" : "")}${(derived.tail_risk?.prob_2pct_drop * 100 * 2.5).toFixed(1)}%`}
@@ -305,7 +305,7 @@ export default function AssetDetailPage({
       )}
 
       {/* Quant Row: Options + Distribution */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Options Chain */}
         <div className="bg-bg-secondary border border-border-dim">
           <div className="px-4 py-3 border-b border-border-dim flex items-center justify-between">

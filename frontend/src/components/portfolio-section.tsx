@@ -14,12 +14,16 @@ export function PortfolioSection() {
   const { data, isLoading, error, refetch } = usePortfolio();
   const [inputAddress, setInputAddress] = useState("");
   const [closingAsset, setClosingAsset] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState("");
+  const storedApiKey = useSettingsStore((s) => s.hlApiWalletKey);
+  const [apiKey, setApiKey] = useState(storedApiKey);
   const [showApiKey, setShowApiKey] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
 
-  const handleClose = async (asset: string) => {
-    if (!apiKey) {
+  // Keep in sync if stored key changes
+  const effectiveKey = apiKey || storedApiKey;
+
+  const handleClose = async (asset: string, positionType?: string, size?: number) => {
+    if (!effectiveKey) {
       setShowApiKey(true);
       return;
     }
@@ -28,8 +32,10 @@ export function PortfolioSection() {
     try {
       await api.closePosition({
         asset,
-        private_key: apiKey,
+        private_key: effectiveKey,
         account_address: walletAddress || hlAddress || undefined,
+        position_type: positionType || "perp",
+        size: positionType === "spot" ? size : undefined,
       });
       // Refresh positions after close
       setTimeout(() => refetch(), 2000);
@@ -65,7 +71,7 @@ export function PortfolioSection() {
           <div className="font-mono text-[11px] text-text-muted text-center tracking-wider">
             CONNECT HYPERLIQUID ADDRESS TO VIEW POSITIONS
           </div>
-          <div className="flex gap-2 w-full max-w-md">
+          <div className="flex flex-col sm:flex-row gap-2 w-full max-w-md">
             <input
               type="text"
               value={inputAddress}
@@ -115,7 +121,7 @@ export function PortfolioSection() {
 
       {/* Margin Summary */}
       {margin && (
-        <div className="grid grid-cols-3 gap-px bg-border-dim border-b border-border-dim">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border-dim border-b border-border-dim">
           <div className="bg-bg-secondary p-2.5 text-center">
             <p className="font-mono text-[8px] text-text-muted tracking-wider">ACCOUNT_VALUE</p>
             <p className="font-mono text-[13px] text-text-primary font-semibold tabular-nums">
@@ -150,7 +156,7 @@ export function PortfolioSection() {
       ) : positions.length > 0 ? (
         <div>
           {/* API Key for closing */}
-          {showApiKey && !apiKey && (
+          {showApiKey && !effectiveKey && (
             <div className="px-4 py-3 border-b border-border-dim bg-bg-tertiary">
               <label className="block font-mono text-[9px] text-text-muted tracking-wider mb-1">
                 HL API WALLET KEY (REQUIRED TO CLOSE POSITIONS)
@@ -200,6 +206,9 @@ export function PortfolioSection() {
                   <tr key={`${pos.asset}-${idx}`} className="border-t border-border-dim hover:bg-bg-hover transition-colors">
                     <td className="px-4 py-2.5 font-semibold text-text-primary tracking-wider">
                       {pos.asset}
+                      {pos.type === "spot" && (
+                        <span className="text-[7px] text-text-muted ml-1">[SPOT]</span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-center">
                       <span className={cn(
@@ -240,7 +249,7 @@ export function PortfolioSection() {
                     </td>
                     <td className="px-4 py-2.5 text-center">
                       <button
-                        onClick={() => handleClose(pos.asset)}
+                        onClick={() => handleClose(pos.asset, pos.type, Number(pos.size))}
                         disabled={closingAsset === pos.asset}
                         className="px-3 py-1 bg-bear/10 text-bear border border-bear/20 text-[9px] font-mono tracking-wider hover:bg-bear/20 transition-all disabled:opacity-50"
                       >

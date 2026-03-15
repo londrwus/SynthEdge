@@ -39,7 +39,7 @@ export default function DashboardPage() {
             <span className="font-mono text-[9px] text-text-muted tracking-wider">[D3.JS]</span>
           </div>
           <div className="p-4">
-            <ProbabilityCone asset={selectedAsset} height={320} />
+            <ProbabilityCone asset={selectedAsset} height={280} />
           </div>
         </div>
 

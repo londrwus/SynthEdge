@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" fill="#0C0C0C"/>
+  <rect x="1" y="1" width="30" height="30" fill="none" stroke="#2f2f2f" stroke-width="1"/>
+  <!-- S letterform built from angular terminal-style segments -->
+  <path d="M22 8 L10 8 L10 14 L22 14 L22 24 L10 24" fill="none" stroke="#f5f8c2" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"/>
+  <!-- Corner accent marks -->
+  <rect x="3" y="3" width="2" height="2" fill="#f5f8c2" opacity="0.3"/>
+  <rect x="27" y="27" width="2" height="2" fill="#f5f8c2" opacity="0.3"/>
+</svg>

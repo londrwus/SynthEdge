@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSettingsStore } from "@/stores/useSettingsStore";
@@ -17,7 +17,7 @@ const NAV_ITEMS = [
   { href: "/terminal/risk", icon: "\u26A0", label: "RISK MONITOR" },
   { href: "/terminal/portfolio", icon: "\u25A3", label: "PORTFOLIO" },
   { href: "/terminal/faq", icon: "?", label: "HELP / FAQ" },
-  { href: "/settings", icon: "\u2699", label: "SETTINGS" },
+  { href: "/terminal/settings", icon: "\u2699", label: "SETTINGS" },
 ];
 
 export default function TerminalLayout({
@@ -29,23 +29,56 @@ export default function TerminalLayout({
   const horizon = useSettingsStore((s) => s.horizon);
   const setHorizon = useSettingsStore((s) => s.setHorizon);
   const synthApiKey = useSettingsStore((s) => s.synthApiKey);
-  const hlAddress = useSettingsStore((s) => s.hlAddress);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Close sidebar on route change — use ref to avoid lint warning about setState in effect
+  const pathnameRef = useRef(pathname);
+  if (pathnameRef.current !== pathname) {
+    pathnameRef.current = pathname;
+    if (sidebarOpen) setSidebarOpen(false);
+  }
+
+  // Close sidebar on escape key
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-bg-primary overflow-hidden">
       {/* Header */}
-      <header className="h-10 flex items-center justify-between px-4 bg-bg-sidebar border-b border-border-dim shrink-0">
-        <Link href="/terminal" className="flex items-center gap-2">
-          <span className="font-mono text-sm font-bold tracking-wider">
-            <span className="text-neon-green">SYNTH</span>
-            <span className="text-text-primary">EDGE</span>
-          </span>
-          <span className="font-mono text-[9px] text-text-muted tracking-wider ml-1">TERMINAL</span>
-        </Link>
+      <header className="h-10 flex items-center justify-between px-3 sm:px-4 bg-bg-sidebar border-b border-border-dim shrink-0">
+        <div className="flex items-center gap-2">
+          {/* Hamburger — mobile only */}
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="lg:hidden font-mono text-text-secondary hover:text-neon-green transition-colors p-1"
+            aria-label="Toggle menu"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+              {sidebarOpen ? (
+                <path d="M4 4L14 14M14 4L4 14" />
+              ) : (
+                <path d="M2 4h14M2 9h14M2 14h14" />
+              )}
+            </svg>
+          </button>
 
-        <div className="flex items-center gap-4">
+          <Link href="/terminal" className="flex items-center gap-2">
+            <span className="font-mono text-sm font-bold tracking-wider">
+              <span className="text-neon-green">SYNTH</span>
+              <span className="text-text-primary">EDGE</span>
+            </span>
+            <span className="font-mono text-[9px] text-text-muted tracking-wider ml-1 hidden sm:inline">TERMINAL</span>
+          </Link>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-4">
           {/* Status Indicators */}
-          <div className="hidden md:flex items-center gap-3 font-mono text-[10px] tracking-wider">
+          <div className="hidden sm:flex items-center gap-3 font-mono text-[10px] tracking-wider">
             <span className={synthApiKey ? "text-neon-green" : "text-text-muted"}>
               SYNTH {synthApiKey ? "[CONNECTED]" : "[NO_KEY]"}
             </span>
@@ -53,14 +86,14 @@ export default function TerminalLayout({
             <WalletConnect />
           </div>
 
-          <span className="text-border-dim hidden md:inline">|</span>
+          <span className="text-border-dim hidden sm:inline">|</span>
 
           {/* Horizon Toggle */}
           <div className="flex border border-border-dim">
             <button
               onClick={() => setHorizon("1h")}
               className={cn(
-                "px-3 py-1 font-mono text-[11px] tracking-wider transition-all",
+                "px-2 sm:px-3 py-1 font-mono text-[11px] tracking-wider transition-all",
                 horizon === "1h"
                   ? "bg-neon-green/15 text-neon-green"
                   : "text-text-muted hover:text-text-secondary bg-bg-sidebar"
@@ -71,7 +104,7 @@ export default function TerminalLayout({
             <button
               onClick={() => setHorizon("24h")}
               className={cn(
-                "px-3 py-1 font-mono text-[11px] tracking-wider transition-all border-l border-border-dim",
+                "px-2 sm:px-3 py-1 font-mono text-[11px] tracking-wider transition-all border-l border-border-dim",
                 horizon === "24h"
                   ? "bg-neon-green/15 text-neon-green"
                   : "text-text-muted hover:text-text-secondary bg-bg-sidebar"
@@ -86,9 +119,24 @@ export default function TerminalLayout({
       {/* Ticker Tape */}
       <TickerTape />
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Expanded with text labels */}
-        <nav className="w-48 bg-bg-sidebar border-r border-border-dim flex flex-col shrink-0">
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Mobile overlay backdrop */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/60 z-30 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Sidebar */}
+        <nav
+          className={cn(
+            "w-48 bg-bg-sidebar border-r border-border-dim flex flex-col shrink-0 z-40 transition-transform duration-200",
+            // Mobile: overlay off-screen, slide in when open
+            "fixed lg:relative top-0 left-0 h-full",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          )}
+        >
           {/* Logo */}
           <div className="px-4 py-4 border-b border-border-dim">
             <div className="font-mono text-[11px] tracking-widest text-neon-green font-bold">
@@ -99,8 +147,18 @@ export default function TerminalLayout({
             </div>
           </div>
 
+          {/* Mobile-only: wallet + status */}
+          <div className="sm:hidden px-4 py-3 border-b border-border-dim space-y-2">
+            <div className="font-mono text-[10px] tracking-wider">
+              <span className={synthApiKey ? "text-neon-green" : "text-text-muted"}>
+                SYNTH {synthApiKey ? "[CONNECTED]" : "[NO_KEY]"}
+              </span>
+            </div>
+            <WalletConnect />
+          </div>
+
           {/* Nav Items */}
-          <div className="flex-1 py-2">
+          <div className="flex-1 py-2 overflow-y-auto">
             {NAV_ITEMS.map((item) => {
               const isActive =
                 item.href === "/terminal"
@@ -139,28 +197,25 @@ export default function TerminalLayout({
             </div>
             <div className="font-mono text-[9px] text-text-muted tracking-wider flex justify-between">
               <span>VERSION</span>
-              <span>v0.1.0</span>
+              <span>v0.1.1</span>
             </div>
           </div>
         </nav>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto p-4 bg-bg-primary">{children}</main>
+        <main className="flex-1 overflow-auto p-2 sm:p-4 bg-bg-primary">{children}</main>
       </div>
 
       {/* Status Bar */}
-      <footer className="h-6 flex items-center justify-between px-4 bg-bg-sidebar border-t border-border-dim shrink-0">
-        <div className="flex items-center gap-4 font-mono text-[10px] tracking-wider">
+      <footer className="h-6 flex items-center justify-between px-3 sm:px-4 bg-bg-sidebar border-t border-border-dim shrink-0">
+        <div className="flex items-center gap-2 sm:gap-4 font-mono text-[10px] tracking-wider">
           <span className="text-neon-green">● SYNTH_API</span>
-          <span className="text-text-muted">
+          <span className="text-text-muted hidden sm:inline">
             HORIZON: {horizon.toUpperCase()}
           </span>
-          <span className="text-text-muted">
-            ASSETS: 9
-          </span>
         </div>
-        <div className="flex items-center gap-4 font-mono text-[10px] tracking-wider text-text-muted">
-          <span>
+        <div className="flex items-center gap-2 sm:gap-4 font-mono text-[10px] tracking-wider text-text-muted">
+          <span className="hidden sm:inline">
             Powered by{" "}
             <a
               href="https://www.tradingview.com/"

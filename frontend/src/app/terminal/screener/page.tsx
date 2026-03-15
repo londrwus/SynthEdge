@@ -73,7 +73,7 @@ export default function ScreenerPage() {
       </div>
 
       {/* Top Signals */}
-      <div className="grid grid-cols-3 gap-px bg-border-dim">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border-dim">
         <div className="bg-bg-secondary p-3">
           <p className="font-mono text-[9px] text-text-muted tracking-wider">HIGHEST_UP_PROBABILITY</p>
           {byUpProb[0] && (
@@ -176,18 +176,19 @@ function AssetTable({ assets, onSelect }: { assets: any[]; onSelect: (asset: str
   if (assets.length === 0) return <div className="p-4 font-mono text-[10px] text-text-muted">NO DATA</div>;
 
   return (
+    <div className="overflow-x-auto">
     <table className="w-full font-mono text-[11px]">
       <thead>
         <tr className="text-[9px] text-text-muted tracking-wider border-b border-border-dim">
-          <th className="text-left px-4 py-2">ASSET</th>
-          <th className="text-right px-4 py-2">PRICE</th>
-          <th className="text-center px-4 py-2">DIRECTION</th>
-          <th className="text-right px-4 py-2">UP_PROB</th>
-          <th className="text-right px-4 py-2">VOL</th>
-          <th className="text-center px-4 py-2">REGIME</th>
-          <th className="text-right px-4 py-2">SKEW</th>
-          <th className="text-right px-4 py-2">CONVICTION</th>
-          <th className="text-center px-4 py-2">ACTION</th>
+          <th className="text-left px-3 sm:px-4 py-2">ASSET</th>
+          <th className="text-right px-3 sm:px-4 py-2">PRICE</th>
+          <th className="text-center px-3 sm:px-4 py-2">DIRECTION</th>
+          <th className="text-right px-3 sm:px-4 py-2">UP_PROB</th>
+          <th className="text-right px-3 sm:px-4 py-2 hidden sm:table-cell">VOL</th>
+          <th className="text-center px-3 sm:px-4 py-2 hidden md:table-cell">REGIME</th>
+          <th className="text-right px-3 sm:px-4 py-2 hidden md:table-cell">SKEW</th>
+          <th className="text-right px-3 sm:px-4 py-2 hidden sm:table-cell">CONVICTION</th>
+          <th className="text-center px-3 sm:px-4 py-2">ACTION</th>
         </tr>
       </thead>
       <tbody>
@@ -218,10 +219,10 @@ function AssetTable({ assets, onSelect }: { assets: any[]; onSelect: (asset: str
             )}>
               {formatPercent(a.up_probability)}
             </td>
-            <td className="px-4 py-2.5 text-right tabular-nums text-text-secondary">
+            <td className="px-3 sm:px-4 py-2.5 text-right tabular-nums text-text-secondary hidden sm:table-cell">
               {formatVol(a.implied_vol)}
             </td>
-            <td className="px-4 py-2.5 text-center">
+            <td className="px-3 sm:px-4 py-2.5 text-center hidden md:table-cell">
               <span className={cn(
                 "text-[8px] px-1.5 py-0.5 border tracking-wider",
                 a.regime === "tail_risk" ? "border-bear/30 text-bear" :
@@ -232,10 +233,10 @@ function AssetTable({ assets, onSelect }: { assets: any[]; onSelect: (asset: str
                 [{a.regime?.replace(/_/g, " ").toUpperCase()}]
               </span>
             </td>
-            <td className="px-4 py-2.5 text-right tabular-nums text-text-secondary">
+            <td className="px-3 sm:px-4 py-2.5 text-right tabular-nums text-text-secondary hidden md:table-cell">
               {a.skew > 0 ? "+" : ""}{a.skew?.toFixed(3)}
             </td>
-            <td className="px-4 py-2.5 text-right tabular-nums text-text-secondary">
+            <td className="px-3 sm:px-4 py-2.5 text-right tabular-nums text-text-secondary hidden sm:table-cell">
               {formatPercent(a.conviction)}
             </td>
             <td className="px-4 py-2.5 text-center">
@@ -247,5 +248,6 @@ function AssetTable({ assets, onSelect }: { assets: any[]; onSelect: (asset: str
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

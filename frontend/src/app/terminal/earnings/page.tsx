@@ -108,7 +108,7 @@ export default function EarningsPage() {
           </div>
 
           <div className="p-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Column 1: Synth Forecast */}
               <div className="space-y-3">
                 <h3 className="font-mono text-[10px] text-text-muted tracking-wider">
@@ -303,7 +303,7 @@ export default function EarningsPage() {
               INDEX — NO EARNINGS
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-px bg-border-dim">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border-dim">
             <div className="bg-bg-tertiary p-2.5 text-center">
               <p className="font-mono text-[8px] text-text-muted tracking-wider">IMPLIED_VOL</p>
               <p className="font-mono text-[14px] text-neon-green font-bold tabular-nums">

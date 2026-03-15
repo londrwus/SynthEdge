@@ -30,7 +30,7 @@ export function CrossAssetVol() {
   return (
     <div className="space-y-3">
       {/* Class Summary */}
-      <div className="grid grid-cols-3 gap-px bg-border-dim">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border-dim">
         {[
           { label: "CRYPTO_VOL", value: classAvg.crypto, color: "text-neon-green" },
           { label: "EQUITY_VOL", value: classAvg.equity, color: "text-text-primary" },

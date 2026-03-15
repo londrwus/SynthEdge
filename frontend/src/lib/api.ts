@@ -9,7 +9,15 @@ async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    // Try to extract the detail message from FastAPI error responses
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body.detail) detail = body.detail;
+    } catch {
+      // Response wasn't JSON
+    }
+    throw new Error(detail);
   }
   return res.json();
 }
@@ -103,7 +111,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  closePosition: (body: { asset: string; private_key?: string; account_address?: string }) =>
+  closePosition: (body: { asset: string; private_key?: string; account_address?: string; position_type?: string; size?: number }) =>
     fetchAPI<any>("/api/trading/close", {
       method: "POST",
       body: JSON.stringify(body),

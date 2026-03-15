@@ -24,15 +24,13 @@ const COINGECKO_IDS: Record<string, string> = {
   SOL: "solana",
 };
 
-// For stocks we generate synthetic historical bars from the current price
-// since free stock APIs require auth
+// Generate synthetic historical bars for assets without free API data
 function generateSyntheticHistory(currentPrice: number, count: number, baseTime: number, interval: number): any[] {
   const bars = [];
   let price = currentPrice;
-  // Walk backwards from current price with random walk
   const prices = [currentPrice];
   for (let i = 1; i < count; i++) {
-    const change = (Math.random() - 0.48) * currentPrice * 0.003; // slight downward bias to show "history"
+    const change = (Math.random() - 0.48) * currentPrice * 0.003;
     price = price - change;
     prices.unshift(price);
   }
@@ -63,7 +61,7 @@ export function PriceChart({ asset, height = 340 }: PriceChartProps) {
   const { data: res } = usePercentiles(asset);
   const [historyData, setHistoryData] = useState<any[] | null>(null);
 
-  // Fetch real historical OHLC data via CoinGecko (7 days for crypto)
+  // Fetch real historical OHLC data via CoinGecko (30 days for crypto)
   useEffect(() => {
     const geckoId = COINGECKO_IDS[asset];
     if (!geckoId) {
@@ -73,9 +71,9 @@ export function PriceChart({ asset, height = 340 }: PriceChartProps) {
 
     const fetchHistory = async () => {
       try {
-        // 7 days gives ~168 4-hour candles — good density
+        // 30 days gives ~720 candles at 1h resolution — plenty of history
         const resp = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${geckoId}/ohlc?vs_currency=usd&days=7`
+          `https://api.coingecko.com/api/v3/coins/${geckoId}/ohlc?vs_currency=usd&days=30`
         );
         if (resp.ok) {
           const data = await resp.json();
@@ -169,8 +167,9 @@ export function PriceChart({ asset, height = 340 }: PriceChartProps) {
       // Use real data, filter to bars before forecast start
       historicBars = historyData.filter((b: any) => b.time < baseTime);
     } else {
-      // Generate synthetic history (more bars for realistic look)
-      const numBars = horizon === "1h" ? 60 : 120;
+      // Generate at least 48h of synthetic history for equities
+      // 48h at 5min intervals = 576 bars, at 1min = 2880 (cap at 500 for perf)
+      const numBars = horizon === "1h" ? 500 : 576;
       historicBars = generateSyntheticHistory(currentPrice, numBars, baseTime, intervalSec);
     }
     candleSeries.setData(historicBars);
@@ -212,7 +211,7 @@ export function PriceChart({ asset, height = 340 }: PriceChartProps) {
     }
     forecastSeries.setData(forecastData);
 
-    // P95 / P05 bounds
+    // P95 / P05 bounds (outer CI)
     const p95Series = chart.addSeries(LineSeries, {
       color: "rgba(74, 222, 128, 0.3)",
       lineWidth: 1,
@@ -220,6 +219,7 @@ export function PriceChart({ asset, height = 340 }: PriceChartProps) {
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
+      title: "P95",
     });
     const p05Series = chart.addSeries(LineSeries, {
       color: "rgba(255, 51, 102, 0.3)",
@@ -228,10 +228,33 @@ export function PriceChart({ asset, height = 340 }: PriceChartProps) {
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
+      title: "P05",
+    });
+
+    // P80 / P20 bounds (inner CI)
+    const p80Series = chart.addSeries(LineSeries, {
+      color: "rgba(74, 222, 128, 0.15)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      title: "P80",
+    });
+    const p20Series = chart.addSeries(LineSeries, {
+      color: "rgba(255, 51, 102, 0.15)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      title: "P20",
     });
 
     const p95Data: any[] = [];
     const p05Data: any[] = [];
+    const p80Data: any[] = [];
+    const p20Data: any[] = [];
     const seenBound = new Set<number>();
     for (let i = 0; i < percentiles.length; i += step) {
       const t = baseTime + i * intervalSec;
@@ -239,10 +262,14 @@ export function PriceChart({ asset, height = 340 }: PriceChartProps) {
         seenBound.add(t);
         p95Data.push({ time: t as any, value: percentiles[i]["0.95"] || currentPrice });
         p05Data.push({ time: t as any, value: percentiles[i]["0.05"] || currentPrice });
+        p80Data.push({ time: t as any, value: percentiles[i]["0.8"] || currentPrice });
+        p20Data.push({ time: t as any, value: percentiles[i]["0.2"] || currentPrice });
       }
     }
     p95Series.setData(p95Data);
     p05Series.setData(p05Data);
+    p80Series.setData(p80Data);
+    p20Series.setData(p20Data);
 
     // Spot price line
     forecastSeries.createPriceLine({

@@ -1,6 +1,6 @@
 [project]
 name = "synthedge-backend"
-version = "0.1.0"
+version = "0.1.1"
 description = "SynthEdge Trading Terminal Backend"
 requires-python = ">=3.12"
 dependencies = [

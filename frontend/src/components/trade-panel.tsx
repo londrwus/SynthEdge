@@ -14,8 +14,26 @@ interface TradePanelProps {
 }
 
 // All assets tradeable on HL (crypto = native perps, equities = HIP-3 spot)
-const HL_TRADEABLE = new Set(["BTC", "ETH", "SOL", "TSLA", "NVDA", "AAPL", "GOOGL", "SPY", "XAU"]);
-const EQUITY_ASSETS = new Set(["TSLA", "NVDA", "AAPL", "GOOGL", "SPY", "XAU"]);
+const HL_TRADEABLE = new Set(["BTC", "ETH", "SOL", "XAU", "TSLA", "AAPL", "GOOGL", "SPY"]);
+const EQUITY_ASSETS = new Set(["TSLA", "AAPL", "GOOGL", "SPY"]);
+
+// Minimum notional and max leverage per asset
+const MIN_NOTIONAL = 10;
+const MAX_LEVERAGE: Record<string, number> = {
+  BTC: 50, ETH: 50, SOL: 20, XAU: 20,
+  SPY: 10, TSLA: 5, AAPL: 5, GOOGL: 5,
+};
+
+interface TradeResult {
+  status: string;
+  fill_price?: string;
+  filled_size?: string;
+  notional?: number;
+  margin_used?: number;
+  order_id?: number;
+  synth_tp?: number;
+  synth_sl?: number;
+}
 
 export function TradePanel({ asset, currentPrice, upProbability, direction }: TradePanelProps) {
   const isTradeable = HL_TRADEABLE.has(asset);
@@ -25,17 +43,42 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
   const setStoredApiKey = useSettingsStore((s) => s.setHlApiWalletKey);
   const [isBuy, setIsBuy] = useState(direction === "bullish");
   const [size, setSize] = useState("0.001");
-  const [leverage, setLeverage] = useState(5);
+  const maxLev = MAX_LEVERAGE[asset] || 20;
+  const [leverage, setLeverage] = useState(Math.min(5, maxLev));
   const [mode, setMode] = useState<"smart" | "market">("smart");
   const [apiKey, setApiKey] = useState(storedApiKey);
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TradeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const sizeNum = parseFloat(size) || 0;
+  const notional = sizeNum * (currentPrice || 0);
+  const margin = notional / leverage;
+  const isBelowMin = currentPrice ? notional < MIN_NOTIONAL : false;
+
+  // Validate API key format
+  const isKeyValid = apiKey.startsWith("0x") && apiKey.length === 66;
 
   const handleTrade = useCallback(async () => {
     if (!apiKey) {
       setShowKeyInput(true);
+      return;
+    }
+
+    if (!isKeyValid) {
+      setError("Invalid API key format. Must be 0x-prefixed, 64 hex characters. Create one at app.hyperliquid.xyz → Settings → API Wallet.");
+      return;
+    }
+
+    // Pre-flight checks
+    if (sizeNum <= 0) {
+      setError("Size must be greater than 0.");
+      return;
+    }
+
+    if (isBelowMin) {
+      setError(`Order too small. Notional $${notional.toFixed(2)} is below Hyperliquid minimum of $${MIN_NOTIONAL}. Increase your size.`);
       return;
     }
 
@@ -52,7 +95,7 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
       const body = {
         asset,
         is_buy: isBuy,
-        size: parseFloat(size),
+        size: sizeNum,
         leverage,
         private_key: apiKey,
         account_address: address || undefined,
@@ -63,19 +106,13 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
         : api.placeMarketOrder(body));
 
       setResult(res.data);
-    } catch (err: any) {
-      const msg = err.message || "Trade failed";
-      if (msg.includes("400") || msg.includes("Bad Request")) {
-        setError("Order rejected. Common causes: (1) Insufficient margin — deposit USDC to HL perps first. (2) Order size below minimum (~$10). (3) API wallet not linked to trading account.");
-      } else if (msg.includes("Invalid private key")) {
-        setError("Invalid API wallet key. Create one at app.hyperliquid.xyz → API → Create API Wallet.");
-      } else {
-        setError(msg.slice(0, 200));
-      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Trade failed";
+      setError(msg);
     } finally {
       setIsExecuting(false);
     }
-  }, [asset, isBuy, size, mode, apiKey]);
+  }, [asset, isBuy, size, sizeNum, mode, apiKey, leverage, address, notional, isBelowMin, isKeyValid, storedApiKey, setStoredApiKey]);
 
   return (
     <div className="space-y-3">
@@ -83,7 +120,7 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
       {isEquity && (
         <div className="p-2 border border-border-dim bg-bg-tertiary">
           <p className="font-mono text-[8px] text-text-muted tracking-wider">
-            // HIP-3 EQUITY PERP — TRADES VIA HYPERLIQUID SPOT MARKET
+            {"// HIP-3 EQUITY PERP \u2014 TRADES VIA HYPERLIQUID SPOT MARKET"}
           </p>
         </div>
       )}
@@ -102,15 +139,15 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
             (upProbability > 0.55) ? "text-bull" :
             (upProbability < 0.45) ? "text-bear" : "text-neutral"
           )}>
-            {direction?.toUpperCase()} — {(upProbability * 100).toFixed(1)}% UP
+            {direction?.toUpperCase()} {"\u2014"} {(upProbability * 100).toFixed(1)}% UP
           </p>
         </div>
       )}
 
-      {/* Trading form - only for native HL assets */}
+      {/* Trading form */}
       {!isTradeable ? null : !isConnected ? (
         <button
-          onClick={connect}
+          onClick={() => connect()}
           className="w-full py-2.5 font-mono text-[11px] font-bold tracking-widest transition-all border border-neon-green/30 text-neon-green hover:bg-neon-green/10"
         >
           [CONNECT WALLET]
@@ -180,13 +217,23 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
           onChange={(e) => setSize(e.target.value)}
           step="0.001"
           min="0.001"
-          className="w-full bg-bg-tertiary border border-border-dim px-3 py-2 font-mono text-[11px] text-text-primary tabular-nums focus:outline-none focus:border-neon-green/30 transition-all"
+          className={cn(
+            "w-full bg-bg-tertiary border px-3 py-2 font-mono text-[11px] text-text-primary tabular-nums focus:outline-none transition-all",
+            isBelowMin ? "border-bear/50 focus:border-bear/70" : "border-border-dim focus:border-neon-green/30"
+          )}
         />
         {currentPrice && (
-          <p className="font-mono text-[9px] text-text-muted tracking-wider mt-1">
-            ≈ ${formatPrice(parseFloat(size || "0") * currentPrice)} NOTIONAL |
-            MARGIN: ${formatPrice(parseFloat(size || "0") * currentPrice / leverage)}
-          </p>
+          <div className="mt-1 space-y-0.5">
+            <p className={cn(
+              "font-mono text-[9px] tracking-wider",
+              isBelowMin ? "text-bear" : "text-text-muted"
+            )}>
+              {isBelowMin ? `\u26A0 ` : "\u2248 "}
+              ${formatPrice(notional)} NOTIONAL
+              {isBelowMin ? ` \u2014 BELOW $${MIN_NOTIONAL} MINIMUM` : ""}
+              {" | MARGIN: $"}{formatPrice(margin)}
+            </p>
+          </div>
         )}
       </div>
 
@@ -199,7 +246,7 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
         <input
           type="range"
           min={1}
-          max={20}
+          max={maxLev}
           step={1}
           value={leverage}
           onChange={(e) => setLeverage(parseInt(e.target.value))}
@@ -207,21 +254,22 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
         />
         <div className="flex justify-between font-mono text-[8px] text-text-muted tracking-wider mt-1">
           <span>1x</span>
-          <span>5x</span>
-          <span>10x</span>
-          <span>20x</span>
+          {maxLev > 5 && <span>5x</span>}
+          {maxLev > 10 && <span>10x</span>}
+          {maxLev > 20 && <span>20x</span>}
+          <span>{maxLev}x</span>
         </div>
       </div>
 
       {/* Smart Order Info */}
       {mode === "smart" && (
         <div className="p-2 border border-border-dim bg-bg-tertiary">
-          <p className="font-mono text-[8px] text-neon-green/60 tracking-wider mb-1">// SYNTH-POWERED LEVELS</p>
+          <p className="font-mono text-[8px] text-neon-green/60 tracking-wider mb-1">{"// SYNTH-POWERED LEVELS"}</p>
           <p className="font-mono text-[9px] text-text-secondary tracking-wider">
-            TP → {isBuy ? "P80" : "P20"} PERCENTILE
+            TP {"\u2192"} {isBuy ? "P80" : "P20"} PERCENTILE
           </p>
           <p className="font-mono text-[9px] text-text-secondary tracking-wider">
-            SL → {isBuy ? "P20" : "P80"} PERCENTILE
+            SL {"\u2192"} {isBuy ? "P20" : "P80"} PERCENTILE
           </p>
         </div>
       )}
@@ -240,7 +288,7 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
             className="w-full bg-bg-tertiary border border-border-dim px-3 py-2 font-mono text-[10px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon-green/30 transition-all"
           />
           <p className="font-mono text-[8px] text-text-muted tracking-wider mt-1">
-            CREATE AN API WALLET AT APP.HYPERLIQUID.XYZ → SETTINGS.
+            CREATE AN API WALLET AT APP.HYPERLIQUID.XYZ {"\u2192"} SETTINGS.
             KEY IS USED FOR THIS SESSION ONLY.
           </p>
         </div>
@@ -249,7 +297,7 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
       {/* Execute */}
       <button
         onClick={handleTrade}
-        disabled={isExecuting || !size || parseFloat(size) <= 0}
+        disabled={isExecuting || !size || sizeNum <= 0 || isBelowMin}
         className={cn(
           "w-full py-2.5 font-mono text-[11px] font-bold tracking-widest transition-all border",
           isBuy
@@ -261,20 +309,38 @@ export function TradePanel({ asset, currentPrice, upProbability, direction }: Tr
         {isExecuting ? "EXECUTING..." : showKeyInput && !apiKey ? "[ENTER API KEY ABOVE]" : `[${isBuy ? "LONG" : "SHORT"} ${asset}]`}
       </button>
 
-      {/* Result */}
+      {/* Success Result */}
       {result && (
-        <div className="p-2 border border-neon-green/30 bg-neon-green/5">
+        <div className="p-2 border border-neon-green/30 bg-neon-green/5 space-y-1">
           <p className="font-mono text-[10px] text-neon-green tracking-wider font-bold">
             {result.status?.toUpperCase() || "SUBMITTED"}
           </p>
+          {result.fill_price && (
+            <p className="font-mono text-[9px] text-text-secondary tracking-wider">
+              FILL: ${result.fill_price}
+              {result.filled_size ? ` | SIZE: ${result.filled_size}` : ""}
+            </p>
+          )}
+          {result.notional && (
+            <p className="font-mono text-[9px] text-text-secondary tracking-wider">
+              NOTIONAL: ${formatPrice(result.notional)}
+              {result.margin_used ? ` | MARGIN: $${formatPrice(result.margin_used)}` : ""}
+            </p>
+          )}
           {result.synth_tp && (
-            <p className="font-mono text-[9px] text-text-secondary tracking-wider mt-1">
-              TP: ${formatPrice(result.synth_tp)} | SL: ${formatPrice(result.synth_sl)}
+            <p className="font-mono text-[9px] text-text-secondary tracking-wider">
+              TP: ${formatPrice(result.synth_tp)} | SL: ${formatPrice(result.synth_sl || 0)}
+            </p>
+          )}
+          {result.order_id && (
+            <p className="font-mono text-[8px] text-text-muted tracking-wider">
+              ORDER #{result.order_id}
             </p>
           )}
         </div>
       )}
 
+      {/* Error */}
       {error && (
         <div className="p-2 border border-bear/30 bg-bear/5">
           <p className="font-mono text-[9px] text-bear tracking-wider">{error}</p>

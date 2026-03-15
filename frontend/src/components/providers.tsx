@@ -1,8 +1,13 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { WagmiProvider } from "wagmi";
+import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import "@rainbow-me/rainbowkit/styles.css";
+import { useState } from "react";
 import { useHydrateStore } from "@/stores/useSettingsStore";
+import { config } from "@/lib/wagmi";
+import { synthEdgeTheme } from "@/lib/rainbowkit-theme";
 
 function StoreHydration() {
   useHydrateStore();
@@ -25,9 +30,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <StoreHydration />
-      {children}
-    </QueryClientProvider>
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider theme={synthEdgeTheme} locale="en">
+          <StoreHydration />
+          {children}
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }

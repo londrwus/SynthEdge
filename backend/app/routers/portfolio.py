@@ -1,23 +1,38 @@
 """Portfolio endpoints — Hyperliquid positions enriched with Synth data."""
 
+import asyncio
 from fastapi import APIRouter, Query
-from app.services.hl_service import get_user_state, parse_positions, get_margin_summary
+from app.services.hl_service import (
+    get_user_state, parse_positions, get_margin_summary,
+    get_spot_user_state, parse_spot_balances, HL_TO_SYNTH,
+)
 from app.services.synth_service import get_cached_derived, get_cached_synth
 from app.core.derivations import get_last_percentiles, liquidation_probability
-from app.services.hl_service import HL_TO_SYNTH
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 
 @router.get("/positions")
 async def get_positions(address: str = Query(...), horizon: str = Query("24h")):
-    state = get_user_state(address)
-    positions = parse_positions(state)
+    # Fetch both perp and spot states in parallel (sync calls offloaded to thread pool)
+    state, spot_state = await asyncio.gather(
+        asyncio.to_thread(get_user_state, address),
+        asyncio.to_thread(get_spot_user_state, address),
+    )
+
+    perp_positions = parse_positions(state)
+    spot_positions = parse_spot_balances(spot_state)
+    all_positions = perp_positions + spot_positions
+
     margin = get_margin_summary(state)
+
+    # Add spot value to account total
+    spot_value = sum(p["notional"] for p in spot_positions)
+    margin["account_value"] += spot_value
 
     # Enrich with Synth data
     enriched = []
-    for pos in positions:
+    for pos in all_positions:
         synth_asset = pos["synth_asset"]
         derived = await get_cached_derived(synth_asset, horizon)
         raw = await get_cached_synth(synth_asset, horizon)
@@ -50,12 +65,22 @@ async def get_positions(address: str = Query(...), horizon: str = Query("24h")):
 
 @router.get("/summary")
 async def get_summary(address: str = Query(...), horizon: str = Query("24h")):
-    state = get_user_state(address)
-    positions = parse_positions(state)
+    state, spot_state = await asyncio.gather(
+        asyncio.to_thread(get_user_state, address),
+        asyncio.to_thread(get_spot_user_state, address),
+    )
+
+    perp_positions = parse_positions(state)
+    spot_positions = parse_spot_balances(spot_state)
+    all_positions = perp_positions + spot_positions
+
     margin = get_margin_summary(state)
 
-    total_pnl = sum(p["unrealized_pnl"] for p in positions)
-    total_notional = sum(p["notional"] for p in positions)
+    spot_value = sum(p["notional"] for p in spot_positions)
+    margin["account_value"] += spot_value
+
+    total_pnl = sum(p["unrealized_pnl"] for p in all_positions)
+    total_notional = sum(p["notional"] for p in all_positions)
 
     return {
         "data": {
@@ -63,6 +88,6 @@ async def get_summary(address: str = Query(...), horizon: str = Query("24h")):
             "total_margin_used": margin["total_margin_used"],
             "total_notional": total_notional,
             "total_unrealized_pnl": total_pnl,
-            "position_count": len(positions),
+            "position_count": len(all_positions),
         }
     }
