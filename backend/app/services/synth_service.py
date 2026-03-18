@@ -6,16 +6,12 @@ CREDIT OPTIMIZATION:
 - Redis TTL: 10 minutes (survives between polls)
 - Connection pooling via shared httpx client
 - Mock data saved once per session
-- Force-refresh endpoint for manual updates (requires user API key)
-- Production: set SYNTH_POLL_INTERVAL_SECONDS=43200 for 12h polling
+- Force-refresh endpoint for manual updates
 
 Cost estimate at 5-min polling:
   9 assets × 1 call × 12/hr = 108 credits/hr
   + 9 assets × 1h every 3rd cycle = 36 credits/hr
   Total: ~144 credits/hr = 3,456 credits/day
-
-Cost estimate at 12h polling (production):
-  ~24 credits/day
 """
 
 import asyncio
@@ -129,7 +125,7 @@ async def get_poll_status() -> dict:
 
 
 async def force_refresh_all(api_key: str | None = None) -> dict:
-    """Force-refresh all assets. Requires explicit API key — env key reserved for polling."""
+    """Force-refresh all assets. Called by manual refresh button. Requires user-provided key."""
     key = api_key
     if not key:
         return {"error": "no_api_key", "refreshed": 0}

@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/synth", tags=["synth"])
 
 
 def _resolve_api_key(header_key: Optional[str] = None) -> Optional[str]:
-    """Use header key only. Env key is reserved for background polling."""
+    """Use header key if provided. Never fall back to env var for user requests."""
     return header_key or None
 
 

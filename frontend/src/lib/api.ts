@@ -2,14 +2,7 @@ import { useSettingsStore } from "@/stores/useSettingsStore";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-async function ensureHydrated(): Promise<void> {
-  if (!useSettingsStore.persist.hasHydrated()) {
-    await useSettingsStore.persist.rehydrate();
-  }
-}
-
 async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
-  await ensureHydrated();
   const apiKey = useSettingsStore.getState().synthApiKey;
   const res = await fetch(`${API_URL}${path}`, {
     ...options,

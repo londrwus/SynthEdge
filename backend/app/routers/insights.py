@@ -14,9 +14,9 @@ router = APIRouter(prefix="/api/insights", tags=["insights"])
 
 
 def _resolve_key(header_key: Optional[str] = None) -> str:
-    """Use header key only. Env key is reserved for background polling."""
+    """Use header key only. Never fall back to env var for user requests."""
     if not header_key:
-        raise HTTPException(status_code=401, detail="No Synth API key provided. Enter your key in Settings.")
+        raise HTTPException(status_code=401, detail="No Synth API key provided. Enter your API key in settings.")
     return header_key
 
 

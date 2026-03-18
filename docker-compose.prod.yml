@@ -59,6 +59,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: https://api.synthedge.xyz
+        NEXT_PUBLIC_APP_URL: https://app.synthedge.xyz
     restart: always
     depends_on:
       backend:

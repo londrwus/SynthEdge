@@ -77,3 +77,11 @@ html, body {
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
+
+/* Glitch text clipping */
+.clip-glitch-1 {
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+}
+.clip-glitch-2 {
+  clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+}
