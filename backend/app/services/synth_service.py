@@ -125,8 +125,8 @@ async def get_poll_status() -> dict:
 
 
 async def force_refresh_all(api_key: str | None = None) -> dict:
-    """Force-refresh all assets. Called by manual refresh button."""
-    key = api_key or settings.SYNTH_API_KEY
+    """Force-refresh all assets. Requires explicit API key — env key reserved for polling."""
+    key = api_key
     if not key:
         return {"error": "no_api_key", "refreshed": 0}
 
