@@ -4,7 +4,8 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from typing import Optional
+from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
@@ -82,8 +83,8 @@ async def health():
 
 
 @app.post("/api/refresh")
-async def force_refresh():
-    """Force-refresh all assets from Synth API. Costs 18 credits."""
+async def force_refresh(x_synth_api_key: Optional[str] = Header(None)):
+    """Force-refresh all assets from Synth API. Requires user API key."""
     from app.services.synth_service import force_refresh_all
-    result = await force_refresh_all()
+    result = await force_refresh_all(api_key=x_synth_api_key)
     return {"data": result}

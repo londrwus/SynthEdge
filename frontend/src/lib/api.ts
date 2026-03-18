@@ -1,10 +1,18 @@
+import { useSettingsStore } from "@/stores/useSettingsStore";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+function getSynthApiKey(): string {
+  return useSettingsStore.getState().synthApiKey;
+}
+
 async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
+  const apiKey = getSynthApiKey();
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(apiKey ? { "x-synth-api-key": apiKey } : {}),
       ...options?.headers,
     },
   });

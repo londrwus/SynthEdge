@@ -2,7 +2,6 @@
 
 from typing import Optional
 from fastapi import APIRouter, Header, Query
-from app.config import settings
 from app.services.synth_service import get_cached_synth, get_cached_derived, fetch_percentiles, cache_synth_data
 from app.core.derivations import ASSETS
 
@@ -10,10 +9,8 @@ router = APIRouter(prefix="/api/synth", tags=["synth"])
 
 
 def _resolve_api_key(header_key: Optional[str] = None) -> Optional[str]:
-    """Use header key if provided, otherwise fall back to env var."""
-    if header_key:
-        return header_key
-    return settings.SYNTH_API_KEY or None
+    """Use header key only. Env key is reserved for background polling."""
+    return header_key or None
 
 
 @router.get("/percentiles")

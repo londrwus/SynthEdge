@@ -14,10 +14,10 @@ router = APIRouter(prefix="/api/insights", tags=["insights"])
 
 
 def _resolve_key(header_key: Optional[str] = None) -> str:
-    key = header_key or settings.SYNTH_API_KEY
-    if not key:
-        raise HTTPException(status_code=401, detail="No Synth API key provided")
-    return key
+    """Use header key only. Env key is reserved for background polling."""
+    if not header_key:
+        raise HTTPException(status_code=401, detail="No Synth API key provided. Enter your key in Settings.")
+    return header_key
 
 
 async def _synth_get(path: str, params: dict, api_key: str) -> dict:
