@@ -6,12 +6,16 @@ CREDIT OPTIMIZATION:
 - Redis TTL: 10 minutes (survives between polls)
 - Connection pooling via shared httpx client
 - Mock data saved once per session
-- Force-refresh endpoint for manual updates
+- Force-refresh endpoint for manual updates (requires user API key)
+- Production: set SYNTH_POLL_INTERVAL_SECONDS=43200 for 12h polling
 
 Cost estimate at 5-min polling:
   9 assets × 1 call × 12/hr = 108 credits/hr
   + 9 assets × 1h every 3rd cycle = 36 credits/hr
   Total: ~144 credits/hr = 3,456 credits/day
+
+Cost estimate at 12h polling (production):
+  ~24 credits/day
 """
 
 import asyncio
