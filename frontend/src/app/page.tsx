@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSettingsStore } from "@/stores/useSettingsStore";
-import { motion, useInView, AnimatePresence, useMotionValue, useSpring, useScroll, useTransform } from "framer-motion";
+import { motion, useInView, AnimatePresence, useScroll, useTransform } from "framer-motion";
 
 /* ═══════════════════════════════════════════════════════════════ */
 /*  PRIMITIVES                                                     */
@@ -33,19 +33,6 @@ function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
   return <span ref={ref} className="tabular-nums">{count}{suffix}</span>;
 }
 
-/* ─── Mouse Glow ─── */
-function GlowCursor() {
-  const x = useMotionValue(-200);
-  const y = useMotionValue(-200);
-  const sx = useSpring(x, { stiffness: 120, damping: 30 });
-  const sy = useSpring(y, { stiffness: 120, damping: 30 });
-  useEffect(() => {
-    const h = (e: MouseEvent) => { x.set(e.clientX); y.set(e.clientY); };
-    window.addEventListener("mousemove", h);
-    return () => window.removeEventListener("mousemove", h);
-  }, [x, y]);
-  return <motion.div className="fixed pointer-events-none z-[1] w-[600px] h-[600px] rounded-full" style={{ x: sx, y: sy, translateX: "-50%", translateY: "-50%", background: "radial-gradient(circle, rgba(245,248,194,0.035) 0%, transparent 70%)" }} />;
-}
 
 /* ─── Glitch Text ─── */
 function GlitchText({ text, className = "" }: { text: string; className?: string }) {
@@ -59,20 +46,256 @@ function GlitchText({ text, className = "" }: { text: string; className?: string
   );
 }
 
+/* ─── Visibility pause hook for canvas backgrounds ─── */
+function useCanvasVisible(ref: React.RefObject<HTMLCanvasElement | null>) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([e]) => setVisible(e.isIntersecting), { threshold: 0 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [ref]);
+  return visible;
+}
+
+/* ─── Flow Field Background (inspired by Radiant Shaders) ─── */
+function FlowField() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const visible = useCanvasVisible(canvasRef);
+  const visRef = useRef(visible);
+  visRef.current = visible;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let animId: number;
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    const particles: { x: number; y: number; life: number; maxLife: number }[] = [];
+    const COUNT = 180;
+    let cw = 0, ch = 0;
+    const resize = () => {
+      cw = canvas.offsetWidth;
+      ch = canvas.offsetHeight;
+      canvas.width = cw * dpr;
+      canvas.height = ch * dpr;
+      ctx.scale(dpr, dpr);
+      particles.length = 0;
+      for (let i = 0; i < COUNT; i++) {
+        particles.push({ x: Math.random() * cw, y: Math.random() * ch, life: Math.random() * 250, maxLife: 200 + Math.random() * 150 });
+      }
+    };
+    resize();
+    let t = 0;
+    const TWO_PI = Math.PI * 2;
+    const draw = () => {
+      animId = requestAnimationFrame(draw);
+      if (!visRef.current) return;
+      ctx.fillStyle = "rgba(10,10,10,0.06)";
+      ctx.fillRect(0, 0, cw, ch);
+      t += 0.004;
+      for (const p of particles) {
+        const angle = (Math.sin(p.x * 0.003 + t) * Math.cos(p.y * 0.004 + t * 0.7) +
+          Math.sin(p.x * 0.002 - p.y * 0.003 + t * 0.4) * 0.5 +
+          Math.cos(p.x * 0.005 + p.y * 0.002 + t * 1.1) * 0.3) * TWO_PI;
+        p.x += Math.cos(angle) * 0.6;
+        p.y += Math.sin(angle) * 0.6;
+        p.life++;
+        if (p.life > p.maxLife || p.x < -10 || p.x > cw + 10 || p.y < -10 || p.y > ch + 10) {
+          p.x = Math.random() * cw;
+          p.y = Math.random() * ch;
+          p.life = 0;
+          p.maxLife = 200 + Math.random() * 150;
+        }
+        const a = Math.min(p.life / 40, (p.maxLife - p.life) / 40, 1) * 0.35;
+        ctx.fillStyle = `rgba(245,248,194,${a})`;
+        ctx.fillRect(p.x, p.y, 1.2, 1.2);
+      }
+    };
+    draw();
+    const onResize = () => { ctx.setTransform(1, 0, 0, 1, 0, 0); resize(); ctx.fillStyle = "rgba(10,10,10,1)"; ctx.fillRect(0, 0, cw, ch); };
+    window.addEventListener("resize", onResize);
+    return () => { cancelAnimationFrame(animId); window.removeEventListener("resize", onResize); };
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-50 pointer-events-none" />;
+}
+
+/* ─── Topographic Contour Background (inspired by Radiant Shaders) ─── */
+function TopoField() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const visible = useCanvasVisible(canvasRef);
+  const visRef = useRef(visible);
+  visRef.current = visible;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let animId: number;
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    let w = 0, h = 0;
+    const resize = () => {
+      w = canvas.offsetWidth;
+      h = canvas.offsetHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    // Layered simplex-like noise
+    const n = (x: number, y: number, t: number) => {
+      const s1 = Math.sin(x * 0.006 + t * 0.3) * Math.cos(y * 0.007 - t * 0.2);
+      const s2 = Math.sin(x * 0.012 - y * 0.009 + t * 0.15) * 0.5;
+      const s3 = Math.cos(x * 0.004 + y * 0.005 + t * 0.4) * 0.3;
+      return s1 + s2 + s3;
+    };
+    let t = 0;
+    const LEVELS = 10;
+    const STEP = 12;
+    const draw = () => {
+      animId = requestAnimationFrame(draw);
+      if (!visRef.current) return;
+      ctx.clearRect(0, 0, w, h);
+      t += 0.006;
+      // Sample grid
+      const cols = Math.ceil(w / STEP) + 1;
+      const rows = Math.ceil(h / STEP) + 1;
+      const grid: number[][] = [];
+      for (let r = 0; r < rows; r++) {
+        grid[r] = [];
+        for (let c = 0; c < cols; c++) {
+          grid[r][c] = n(c * STEP, r * STEP, t);
+        }
+      }
+      // Marching squares for each contour level
+      for (let lv = 0; lv < LEVELS; lv++) {
+        const threshold = -1.5 + (lv / LEVELS) * 3;
+        const isMajor = lv % 3 === 0;
+        ctx.strokeStyle = isMajor
+          ? `rgba(245,248,194,${0.07})`
+          : `rgba(245,248,194,${0.03})`;
+        ctx.lineWidth = isMajor ? 1 : 0.5;
+        ctx.beginPath();
+        for (let r = 0; r < rows - 1; r++) {
+          for (let c = 0; c < cols - 1; c++) {
+            const tl = grid[r][c] >= threshold ? 1 : 0;
+            const tr = grid[r][c + 1] >= threshold ? 1 : 0;
+            const br = grid[r + 1][c + 1] >= threshold ? 1 : 0;
+            const bl = grid[r + 1][c] >= threshold ? 1 : 0;
+            const sq = (tl << 3) | (tr << 2) | (br << 1) | bl;
+            if (sq === 0 || sq === 15) continue;
+            const x = c * STEP, y2 = r * STEP;
+            const lerp = (a: number, b: number) => {
+              const d = b - a;
+              return d === 0 ? 0.5 : (threshold - a) / d;
+            };
+            const top = x + lerp(grid[r][c], grid[r][c + 1]) * STEP;
+            const bot = x + lerp(grid[r + 1][c], grid[r + 1][c + 1]) * STEP;
+            const left = y2 + lerp(grid[r][c], grid[r + 1][c]) * STEP;
+            const right = y2 + lerp(grid[r][c + 1], grid[r + 1][c + 1]) * STEP;
+            const seg = (ax: number, ay: number, bx: number, by: number) => {
+              ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+            };
+            switch (sq) {
+              case 1: case 14: seg(x, left, bot, y2 + STEP); break;
+              case 2: case 13: seg(bot, y2 + STEP, x + STEP, right); break;
+              case 3: case 12: seg(x, left, x + STEP, right); break;
+              case 4: case 11: seg(top, y2, x + STEP, right); break;
+              case 5: seg(top, y2, x, left); seg(bot, y2 + STEP, x + STEP, right); break;
+              case 6: case 9: seg(top, y2, bot, y2 + STEP); break;
+              case 7: case 8: seg(x, left, top, y2); break;
+              case 10: seg(top, y2, x + STEP, right); seg(x, left, bot, y2 + STEP); break;
+            }
+          }
+        }
+        ctx.stroke();
+      }
+    };
+    draw();
+    window.addEventListener("resize", resize);
+    return () => { cancelAnimationFrame(animId); window.removeEventListener("resize", resize); };
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />;
+}
+
+/* ─── Text Scramble (inspired by Motion Core) ─── */
+const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*";
+function TextScramble({ text, className = "", delay = 0 }: { text: string; className?: string; delay?: number }) {
+  const [display, setDisplay] = useState(text);
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+  useEffect(() => {
+    if (!inView) return;
+    const timeout = setTimeout(() => {
+      let iter = 0;
+      const id = setInterval(() => {
+        setDisplay(
+          text.split("").map((ch, i) => {
+            if (ch === " ") return " ";
+            if (i < iter) return text[i];
+            return SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+          }).join("")
+        );
+        iter += 0.35;
+        if (iter >= text.length) { setDisplay(text); clearInterval(id); }
+      }, 35);
+    }, delay * 1000);
+    return () => clearTimeout(timeout);
+  }, [inView, text, delay]);
+  return <span ref={ref} className={className}>{display}</span>;
+}
+
 /* ═══════════════════════════════════════════════════════════════ */
-/*  LIVE DATA HOOKS                                                */
+/*  LIVE DATA HOOKS — single shared ticker, no per-component poll */
 /* ═══════════════════════════════════════════════════════════════ */
 
 const PRICES: Record<string, number> = { BTC: 67482, ETH: 3847, SOL: 178.4, SPY: 542.1, NVDA: 134.8, TSLA: 247.6, AAPL: 197.9, GOOGL: 175.5, XAU: 2341 };
+type AssetData = { price: number; prob: number; vol: number; direction: "bullish" | "bearish"; change: number };
+
+// Deterministic defaults for SSR — no Math.random() at module scope
+const defaultAsset = (symbol: string): AssetData => {
+  const base = PRICES[symbol] || 100;
+  return { price: base, prob: 0.55, vol: 34, direction: "bullish", change: 0.6 };
+};
+
+const genAsset = (symbol: string): AssetData => {
+  const base = PRICES[symbol] || 100;
+  const prob = 0.38 + Math.random() * 0.3;
+  return { price: base * (1 + (Math.random() - 0.5) * 0.008), prob, vol: 12 + Math.random() * 55, direction: prob > 0.5 ? "bullish" : "bearish", change: (Math.random() - 0.45) * 4 };
+};
+
+// Single shared store — one interval updates all assets, all components read from it
+const ALL_SYMBOLS = Object.keys(PRICES);
+let sharedData: Record<string, AssetData> | null = null;
+const listeners: Set<() => void> = new Set();
+let tickerStarted = false;
+function startTicker() {
+  if (tickerStarted) return;
+  tickerStarted = true;
+  // First client-side randomization
+  const init: Record<string, AssetData> = {};
+  ALL_SYMBOLS.forEach(s => { init[s] = genAsset(s); });
+  sharedData = init;
+  listeners.forEach(fn => fn());
+  setInterval(() => {
+    const next: Record<string, AssetData> = {};
+    ALL_SYMBOLS.forEach(s => { next[s] = genAsset(s); });
+    sharedData = next;
+    listeners.forEach(fn => fn());
+  }, 2500);
+}
 
 function useLiveAsset(symbol: string) {
-  const [d, setD] = useState({ price: PRICES[symbol] || 100, prob: 0.55, vol: 34, direction: "bullish" as "bullish" | "bearish", change: 0.6 });
-  const gen = useCallback(() => {
-    const base = PRICES[symbol] || 100;
-    const prob = 0.38 + Math.random() * 0.3;
-    return { price: base * (1 + (Math.random() - 0.5) * 0.008), prob, vol: 12 + Math.random() * 55, direction: (prob > 0.5 ? "bullish" : "bearish") as "bullish" | "bearish", change: (Math.random() - 0.45) * 4 };
+  const [d, setD] = useState<AssetData>(() => defaultAsset(symbol));
+  useEffect(() => {
+    startTicker();
+    // Immediately sync with shared data after mount
+    if (sharedData) setD(sharedData[symbol]);
+    const update = () => { if (sharedData) setD(sharedData[symbol]); };
+    listeners.add(update);
+    return () => { listeners.delete(update); };
   }, [symbol]);
-  useEffect(() => { setD(gen()); const id = setInterval(() => setD(gen()), 2200 + Math.random() * 1800); return () => clearInterval(id); }, [gen]);
   return d;
 }
 
@@ -687,7 +910,6 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-bg-primary relative">
-      <GlowCursor />
 
       {/* ─── NAV ─── */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-bg-sidebar/80 backdrop-blur-md border-b border-border-dim">
@@ -699,6 +921,7 @@ export default function LandingPage() {
             <a href="#product" className="font-mono text-[10px] text-text-muted tracking-wider hover:text-text-secondary transition-colors hidden sm:block">PRODUCT</a>
             <a href="#assets" className="font-mono text-[10px] text-text-muted tracking-wider hover:text-text-secondary transition-colors hidden sm:block">ASSETS</a>
             <a href="https://synthdata.co" target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] text-text-muted tracking-wider hover:text-text-secondary transition-colors hidden sm:block">SYNTHDATA</a>
+            <a href="https://x.com/synthedge_xyz" target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] text-text-muted tracking-wider hover:text-text-secondary transition-colors hidden sm:block">𝕏</a>
             <button onClick={() => scrollTo("get-started")} className="px-4 py-1.5 bg-neon-green/10 text-neon-green border border-neon-green/30 font-mono text-[10px] font-bold tracking-widest hover:bg-neon-green/20 transition-all">
               LAUNCH
             </button>
@@ -707,14 +930,19 @@ export default function LandingPage() {
       </nav>
 
       {/* ═══ HERO ═══ */}
-      <section className="min-h-screen flex items-center px-4 pt-12 relative overflow-hidden">
-        {/* Grid bg */}
-        <div className="absolute inset-0 opacity-[0.02]" style={{ backgroundImage: "linear-gradient(rgba(245,248,194,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(245,248,194,0.5) 1px, transparent 1px)", backgroundSize: "60px 60px" }} />
+      <section className="min-h-screen flex items-center px-4 pt-11 relative overflow-hidden">
+        {/* Flow field bg */}
+        <FlowField />
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-neon-green/[0.012] rounded-full blur-[200px]" />
 
         <motion.div style={{ y: heroY, opacity: heroOpacity }} className="relative max-w-6xl mx-auto w-full">
           {/* Text + CTA */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-center max-w-2xl mx-auto">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-neon-green/20 bg-neon-green/[0.05] mb-6 hover:bg-neon-green/[0.08] transition-colors cursor-default">
+              <span className="w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse" />
+              <span className="font-mono text-[10px] text-neon-green/90 font-medium tracking-wider">SYNTH HACKATHON 2026 WINNER</span>
+              <span className="font-mono text-[10px] text-text-muted tracking-wider hidden sm:inline">· Best Equities App</span>
+            </motion.div>
             <h1 className="font-mono text-4xl sm:text-5xl lg:text-[64px] font-bold tracking-wider leading-[0.95]">
               <GlitchText text="SYNTH" className="text-neon-green" />
               <GlitchText text="EDGE" className="text-text-primary" />
@@ -769,9 +997,9 @@ export default function LandingPage() {
           <FadeIn>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="font-mono text-[10px] text-text-muted tracking-wider mb-1">{"// PRODUCT"}</div>
+                <div className="font-mono text-[10px] text-text-muted tracking-wider mb-1"><TextScramble text="// PRODUCT" delay={0.1} /></div>
                 <h2 className="font-mono text-xl sm:text-2xl font-bold tracking-wider">
-                  EVERYTHING IN <span className="text-neon-green">ONE TERMINAL</span>
+                  <TextScramble text="EVERYTHING IN " delay={0.2} /><TextScramble text="ONE TERMINAL" className="text-neon-green" delay={0.3} />
                 </h2>
               </div>
               <motion.button onClick={() => goToApp()} whileHover={{ scale: 1.02 }} className="hidden sm:block px-4 py-1.5 border border-border-dim font-mono text-[10px] text-text-muted tracking-wider hover:text-neon-green hover:border-neon-green/30 transition-all">
@@ -835,14 +1063,15 @@ export default function LandingPage() {
       </section>
 
       {/* ═══ ASSETS — INTERACTIVE GRID ═══ */}
-      <section id="assets" className="py-16 px-4 sm:px-6 bg-bg-secondary border-t border-border-dim">
-        <div className="max-w-6xl mx-auto">
+      <section id="assets" className="py-16 px-4 sm:px-6 bg-bg-secondary border-t border-border-dim relative overflow-hidden">
+        <TopoField />
+        <div className="max-w-6xl mx-auto relative">
           <FadeIn>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="font-mono text-[10px] text-text-muted tracking-wider mb-1">{"// COVERAGE"}</div>
+                <div className="font-mono text-[10px] text-text-muted tracking-wider mb-1"><TextScramble text="// COVERAGE" delay={0.1} /></div>
                 <h2 className="font-mono text-xl sm:text-2xl font-bold tracking-wider">
-                  <span className="text-neon-green">9 ASSETS</span> — HOVER TO EXPLORE
+                  <TextScramble text="9 ASSETS" className="text-neon-green" delay={0.2} /><TextScramble text=" — HOVER TO EXPLORE" delay={0.3} />
                 </h2>
               </div>
               <div className="hidden sm:flex gap-4">
@@ -870,9 +1099,9 @@ export default function LandingPage() {
           {/* SynthData */}
           <FadeIn>
             <div className="bg-bg-secondary border border-border-dim p-6 h-full">
-              <div className="font-mono text-[10px] text-text-muted tracking-wider mb-3">{"// DATA SOURCE"}</div>
+              <div className="font-mono text-[10px] text-text-muted tracking-wider mb-3"><TextScramble text="// DATA SOURCE" delay={0.1} /></div>
               <h3 className="font-mono text-lg font-bold tracking-wider mb-2">
-                POWERED BY <span className="text-neon-green">SYNTHDATA</span>
+                <TextScramble text="POWERED BY " delay={0.2} /><TextScramble text="SYNTHDATA" className="text-neon-green" delay={0.3} />
               </h3>
               <p className="font-mono text-[10px] text-text-muted leading-relaxed mb-4">
                 Instead of a single price target, SynthData&apos;s AI gives you the full picture — 9 probability levels showing best case, worst case, and everything in between. We derive all our analytics from these distributions.
@@ -901,9 +1130,9 @@ export default function LandingPage() {
           {/* How it works */}
           <FadeIn delay={0.1}>
             <div className="bg-bg-secondary border border-border-dim p-6 h-full">
-              <div className="font-mono text-[10px] text-text-muted tracking-wider mb-3">{"// WORKFLOW"}</div>
+              <div className="font-mono text-[10px] text-text-muted tracking-wider mb-3"><TextScramble text="// WORKFLOW" delay={0.1} /></div>
               <h3 className="font-mono text-lg font-bold tracking-wider mb-2">
-                HOW IT <span className="text-neon-green">WORKS</span>
+                <TextScramble text="HOW IT " delay={0.2} /><TextScramble text="WORKS" className="text-neon-green" delay={0.3} />
               </h3>
               <p className="font-mono text-[10px] text-text-muted leading-relaxed mb-4">
                 From API key to trade execution in under a minute. No complex setup — just connect and go.
@@ -992,6 +1221,7 @@ export default function LandingPage() {
               <a href="https://synthdata.co" target="_blank" rel="noopener noreferrer" className="font-mono text-[9px] text-text-muted tracking-wider hover:text-neon-green transition-colors">SYNTHDATA</a>
               <a href="https://hyperliquid.xyz" target="_blank" rel="noopener noreferrer" className="font-mono text-[9px] text-text-muted tracking-wider hover:text-neon-green transition-colors">HYPERLIQUID</a>
               <a href="https://github.com/londrwus/SynthEdge" target="_blank" rel="noopener noreferrer" className="font-mono text-[9px] text-text-muted tracking-wider hover:text-neon-green transition-colors">GITHUB</a>
+              <a href="https://x.com/synthedge_xyz" target="_blank" rel="noopener noreferrer" className="font-mono text-[9px] text-text-muted tracking-wider hover:text-neon-green transition-colors">TWITTER</a>
             </div>
           </div>
           <div className="space-y-0.5 text-right">

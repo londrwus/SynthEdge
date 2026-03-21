@@ -73,7 +73,6 @@ A **probabilistic trading terminal** that bridges **Synth's AI forecasts** with 
 | Cache | Redis 7 (10-min TTL, pipeline writes) |
 | Database | PostgreSQL 16 |
 | Infra | Docker Compose, Nginx, Let's Encrypt SSL |
-| Design | Pencil.dev (webapp-03-industrialtechnical_light style guide) |
 
 ---
 
