@@ -181,7 +181,7 @@ python -m pytest tests/ -v
 
 ## License
 
-MIT
+Source-Available — non-commercial use only. See [LICENSE](LICENSE) for details.
 
 ---
 
